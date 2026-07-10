@@ -1,0 +1,31 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "TokenFlow: test",
+			"type": "shell",
+			"command": ".\\mvnw.cmd",
+			"args": [
+				"test"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "TokenFlow: run",
+			"type": "shell",
+			"command": ".\\mvnw.cmd",
+			"args": [
+				"spring-boot:run"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		}
+	]
+}

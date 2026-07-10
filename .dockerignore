@@ -1,0 +1,9 @@
+.azure
+.git
+.github
+.idea
+.vscode
+target
+*.iml
+*.local
+.env

@@ -1,0 +1,40 @@
+{
+  "properties": [
+    {
+      "name": "token-patterns.openai.api-key",
+      "type": "java.lang.String",
+      "description": "Optional API key enabling live model execution.",
+      "defaultValue": ""
+    },
+    {
+      "name": "token-patterns.openai.endpoint",
+      "type": "java.lang.String",
+      "description": "Azure OpenAI resource endpoint.",
+      "defaultValue": ""
+    },
+    {
+      "name": "token-patterns.openai.managed-identity",
+      "type": "java.lang.Boolean",
+      "description": "Use DefaultAzureCredential instead of an API key.",
+      "defaultValue": false
+    },
+    {
+      "name": "token-patterns.openai.small-model",
+      "type": "java.lang.String",
+      "description": "Model used for low-cost routing and compact tasks.",
+      "defaultValue": "gpt-5.6-luna"
+    },
+    {
+      "name": "token-patterns.openai.medium-model",
+      "type": "java.lang.String",
+      "description": "Model used for standard specialist tasks.",
+      "defaultValue": "gpt-5.6-terra"
+    },
+    {
+      "name": "token-patterns.openai.large-model",
+      "type": "java.lang.String",
+      "description": "Model reserved for high-complexity reasoning.",
+      "defaultValue": "gpt-5.6-sol"
+    }
+  ]
+}

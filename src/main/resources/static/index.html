@@ -1,0 +1,2027 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Interactive LangChain4j Agentic token design pattern lab" />
+  <title>TokenFlow Lab · LangChain4j Agentic Patterns</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button,
+    a,
+    textarea,
+    summary {
+      outline-color: var(--cp-accent);
+      outline-offset: 3px;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    a {
+      color: var(--cp-link);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    ::selection {
+      background: var(--cp-highlight);
+    }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      gap: 24px;
+      align-items: center;
+      min-height: 76px;
+      padding: 14px 28px;
+      background: var(--cp-bg-elevated);
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      border: 1px solid var(--cp-accent);
+      border-radius: 0.625rem;
+      background: var(--cp-accent-soft);
+      color: var(--cp-accent);
+      font-weight: 800;
+      letter-spacing: -0.08em;
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-size: 0.98rem;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-copy span {
+      display: block;
+      overflow: hidden;
+      color: var(--cp-text-muted);
+      font-size: 0.75rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-title {
+      text-align: center;
+    }
+
+    .header-title h1 {
+      margin: 0;
+      font-size: clamp(1rem, 2vw, 1.35rem);
+      font-weight: 750;
+      letter-spacing: -0.025em;
+    }
+
+    .header-title p {
+      margin: 2px 0 0;
+      color: var(--cp-text-muted);
+      font-size: 0.76rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .status-pill,
+    .mini-badge,
+    .trace-kind,
+    .scope-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 26px;
+      padding: 4px 9px;
+      border: 1px solid var(--cp-border);
+      border-radius: 999px;
+      background: var(--cp-surface);
+      color: var(--cp-text-muted);
+      font-size: 0.7rem;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--cp-success);
+    }
+
+    .icon-button {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface);
+      cursor: pointer;
+    }
+
+    .icon-button:hover {
+      border-color: var(--cp-border-strong);
+      background: var(--cp-surface-soft);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 238px minmax(0, 1fr) 294px;
+      gap: 16px;
+      width: min(1800px, 100%);
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .panel,
+    .card {
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface);
+      box-shadow: 0 1px 2px var(--cp-border);
+    }
+
+    .panel {
+      border-radius: 16px;
+    }
+
+    .pattern-rail,
+    .teaching-panel {
+      position: sticky;
+      top: 94px;
+      align-self: start;
+      max-height: calc(100vh - 112px);
+      overflow: auto;
+    }
+
+    .rail-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 16px 10px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      color: var(--cp-accent);
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .rail-heading span {
+      color: var(--cp-text-muted);
+      font-size: 0.7rem;
+    }
+
+    .pattern-list {
+      display: grid;
+      gap: 5px;
+      padding: 4px 8px 10px;
+    }
+
+    .pattern-button {
+      position: relative;
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      min-height: 58px;
+      padding: 8px;
+      border: 1px solid var(--cp-surface);
+      border-radius: 0.625rem;
+      background: var(--cp-surface);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .pattern-button:hover {
+      border-color: var(--cp-border);
+      background: var(--cp-surface-soft);
+      transform: translateX(2px);
+    }
+
+    .pattern-button.active {
+      border-color: var(--cp-accent);
+      background: var(--cp-accent-soft);
+    }
+
+    .pattern-button.active::before {
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: -9px;
+      width: 3px;
+      border-radius: 999px;
+      background: var(--cp-accent);
+      content: "";
+    }
+
+    .pattern-number {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-bg-elevated);
+      color: var(--cp-accent);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .pattern-button.active .pattern-number {
+      border-color: var(--cp-accent);
+    }
+
+    .pattern-label strong,
+    .pattern-label small {
+      display: block;
+    }
+
+    .pattern-label strong {
+      overflow: hidden;
+      font-size: 0.78rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pattern-label small {
+      margin-top: 2px;
+      color: var(--cp-text-muted);
+      font-size: 0.63rem;
+    }
+
+    .rail-footer {
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--cp-border);
+      color: var(--cp-text-muted);
+      font-size: 0.68rem;
+    }
+
+    .main-stage {
+      display: grid;
+      min-width: 0;
+      gap: 14px;
+    }
+
+    .pattern-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      padding: 20px 22px;
+    }
+
+    .hero-copy h2 {
+      margin: 4px 0 4px;
+      font-size: clamp(1.45rem, 3vw, 2.25rem);
+      line-height: 1.1;
+      letter-spacing: -0.045em;
+    }
+
+    .hero-copy p:last-child {
+      max-width: 760px;
+      margin: 7px 0 0;
+      color: var(--cp-text-muted);
+      font-size: 0.9rem;
+    }
+
+    .hero-impact {
+      display: grid;
+      min-width: 156px;
+      gap: 3px;
+      padding: 12px 14px;
+      border-left: 3px solid var(--cp-success);
+      background: var(--cp-surface-soft);
+    }
+
+    .hero-impact span {
+      color: var(--cp-text-muted);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero-impact strong {
+      color: var(--cp-success);
+      font-size: 1rem;
+    }
+
+    .flow-card {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 48px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .card-header h3 {
+      margin: 0;
+      font-size: 0.82rem;
+      letter-spacing: -0.01em;
+    }
+
+    .card-header p {
+      margin: 1px 0 0;
+      color: var(--cp-text-muted);
+      font-size: 0.68rem;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--cp-text-muted);
+      font-size: 0.63rem;
+    }
+
+    .legend i {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--cp-border-strong);
+      border-radius: 2px;
+      background: var(--cp-surface-soft);
+    }
+
+    .legend .legend-model {
+      border-color: var(--cp-accent);
+      background: var(--cp-accent-soft);
+    }
+
+    .legend .legend-non-ai {
+      border-color: var(--cp-success);
+    }
+
+    .flow-viewport {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      min-height: 320px;
+      padding: 6px 12px 10px;
+      overflow: auto hidden;
+      background: var(--cp-bg-elevated);
+    }
+
+    #flowSvg {
+      display: block;
+      width: 100%;
+      min-width: 680px;
+      height: 310px;
+    }
+
+    .flow-edge {
+      fill: none;
+      stroke: var(--cp-border-strong);
+      stroke-width: 1.4;
+      transition: stroke 180ms ease, stroke-width 180ms ease, opacity 180ms ease;
+    }
+
+    .flow-edge.dashed {
+      stroke-dasharray: 6 5;
+    }
+
+    .flow-edge.visited,
+    .flow-edge.active {
+      stroke: var(--cp-accent);
+      stroke-width: 2.3;
+    }
+
+    .flow-edge.active {
+      stroke-dasharray: 8 5;
+      animation: edgeTravel 720ms linear infinite;
+    }
+
+    .arrow-head {
+      fill: var(--cp-border-strong);
+    }
+
+    .edge-label {
+      fill: var(--cp-text-muted);
+      font-size: 10px;
+      font-weight: 650;
+      text-anchor: middle;
+    }
+
+    .flow-node {
+      cursor: default;
+    }
+
+    .flow-node .node-body {
+      fill: var(--cp-surface);
+      stroke: var(--cp-border);
+      stroke-width: 1.2;
+      transition: fill 180ms ease, stroke 180ms ease, stroke-width 180ms ease, transform 180ms ease;
+    }
+
+    .flow-node .node-icon-bg {
+      fill: var(--cp-surface-soft);
+      stroke: var(--cp-border-strong);
+      stroke-width: 1;
+    }
+
+    .flow-node[data-kind^="model"] .node-icon-bg {
+      fill: var(--cp-accent-soft);
+      stroke: var(--cp-accent);
+    }
+
+    .flow-node[data-kind="output"] .node-icon-bg {
+      stroke: var(--cp-success);
+    }
+
+    .flow-node[data-kind="tool"] .node-icon-bg,
+    .flow-node[data-kind="plan"] .node-icon-bg {
+      stroke: var(--cp-warning);
+    }
+
+    .flow-node .node-icon {
+      fill: var(--cp-text);
+      font-size: 12px;
+      font-weight: 800;
+      text-anchor: middle;
+    }
+
+    .flow-node .node-label {
+      fill: var(--cp-text);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .flow-node .node-caption {
+      fill: var(--cp-text-muted);
+      font-size: 9.5px;
+    }
+
+    .flow-node.visited .node-body,
+    .flow-node.active .node-body {
+      fill: var(--cp-accent-soft);
+      stroke: var(--cp-accent);
+      stroke-width: 2;
+    }
+
+    .flow-node.active .node-body {
+      animation: nodePulse 820ms ease-in-out infinite alternate;
+    }
+
+    .flow-node.failed .node-body {
+      stroke: var(--cp-danger);
+    }
+
+    .flow-empty {
+      display: grid;
+      place-items: center;
+      min-height: 310px;
+      color: var(--cp-text-muted);
+      font-size: 0.8rem;
+    }
+
+    .run-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 14px;
+    }
+
+    .runner-card,
+    .answer-card {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .runner-body,
+    .answer-body {
+      padding: 14px;
+    }
+
+    .mode-control {
+      display: inline-flex;
+      padding: 3px;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface-soft);
+    }
+
+    .mode-button {
+      min-width: 58px;
+      padding: 5px 9px;
+      border: 0;
+      border-radius: 7px;
+      background: none;
+      color: var(--cp-text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .mode-button.active {
+      background: var(--cp-surface);
+      color: var(--cp-accent);
+      box-shadow: 0 1px 2px var(--cp-border);
+    }
+
+    .mode-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .input-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      color: var(--cp-text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+    }
+
+    .input-label span:last-child {
+      font-weight: 500;
+    }
+
+    #promptInput {
+      display: block;
+      width: 100%;
+      min-height: 126px;
+      resize: vertical;
+      padding: 12px;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-bg-elevated);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 0.82rem;
+      line-height: 1.55;
+    }
+
+    #promptInput:focus {
+      border-color: var(--cp-accent);
+    }
+
+    .runner-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .primary-button,
+    .secondary-button {
+      min-height: 38px;
+      padding: 8px 14px;
+      border-radius: 0.625rem;
+      font-size: 0.75rem;
+      font-weight: 750;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .primary-button {
+      flex: 1;
+      border: 1px solid var(--cp-accent);
+      background: var(--cp-accent);
+      color: var(--cp-accent-fg);
+    }
+
+    .primary-button:hover:not(:disabled) {
+      border-color: var(--cp-accent-hover);
+      background: var(--cp-accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .primary-button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
+    .secondary-button {
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface);
+      color: var(--cp-text-muted);
+    }
+
+    .secondary-button:hover {
+      border-color: var(--cp-border-strong);
+      background: var(--cp-surface-soft);
+    }
+
+    .cache-reset {
+      display: none;
+    }
+
+    .cache-reset.visible {
+      display: inline-flex;
+    }
+
+    .run-note {
+      display: flex;
+      gap: 8px;
+      margin-top: 11px;
+      padding: 9px 10px;
+      border-left: 2px solid var(--cp-warning);
+      background: var(--cp-surface-soft);
+      color: var(--cp-text-muted);
+      font-size: 0.67rem;
+    }
+
+    .answer-empty,
+    .answer-loading {
+      display: grid;
+      place-items: center;
+      min-height: 190px;
+      padding: 22px;
+      color: var(--cp-text-muted);
+      text-align: center;
+    }
+
+    .empty-orbit {
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 10px;
+      border: 1px dashed var(--cp-border-strong);
+      border-radius: 999px;
+      color: var(--cp-accent);
+      font-weight: 800;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      margin-bottom: 12px;
+      border: 3px solid var(--cp-border);
+      border-top-color: var(--cp-accent);
+      border-radius: 999px;
+      animation: spin 780ms linear infinite;
+    }
+
+    .answer-output {
+      margin: 0;
+      color: var(--cp-text);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.76rem;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .answer-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 13px;
+      padding-top: 11px;
+      border-top: 1px solid var(--cp-border);
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1.25fr repeat(4, minmax(112px, 1fr));
+      gap: 10px;
+    }
+
+    .metric-card {
+      display: flex;
+      min-height: 104px;
+      padding: 13px;
+      border-radius: 16px;
+    }
+
+    .savings-card {
+      align-items: center;
+      gap: 14px;
+    }
+
+    .savings-gauge {
+      --progress: 0deg;
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 70px;
+      height: 70px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: conic-gradient(var(--cp-accent) var(--progress), var(--cp-surface-soft) 0deg);
+    }
+
+    .savings-gauge::after {
+      position: absolute;
+      inset: 7px;
+      border-radius: 999px;
+      background: var(--cp-surface);
+      content: "";
+    }
+
+    .savings-gauge strong {
+      position: relative;
+      z-index: 1;
+      color: var(--cp-accent);
+      font-size: 1rem;
+    }
+
+    .metric-copy {
+      min-width: 0;
+    }
+
+    .metric-label {
+      display: block;
+      color: var(--cp-text-muted);
+      font-size: 0.63rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      display: block;
+      margin-top: 7px;
+      font-size: 1.35rem;
+      font-weight: 780;
+      letter-spacing: -0.04em;
+    }
+
+    .metric-foot {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: var(--cp-text-muted);
+      font-size: 0.62rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-card {
+      overflow: hidden;
+    }
+
+    .trace-summary {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--cp-text-muted);
+      font-size: 0.68rem;
+    }
+
+    .trace-list {
+      display: grid;
+      min-height: 94px;
+    }
+
+    .trace-placeholder {
+      display: grid;
+      place-items: center;
+      min-height: 94px;
+      padding: 18px;
+      color: var(--cp-text-muted);
+      font-size: 0.72rem;
+    }
+
+    .trace-item {
+      display: grid;
+      grid-template-columns: 34px minmax(120px, 0.8fr) minmax(150px, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 58px;
+      padding: 9px 14px;
+      border-top: 1px solid var(--cp-border);
+      opacity: 0.38;
+      transition: opacity 200ms ease, background 200ms ease;
+    }
+
+    .trace-item:first-child {
+      border-top: 0;
+    }
+
+    .trace-item.revealed {
+      background: var(--cp-bg-elevated);
+      opacity: 1;
+    }
+
+    .trace-sequence {
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--cp-border);
+      border-radius: 999px;
+      color: var(--cp-text-muted);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.64rem;
+    }
+
+    .trace-agent strong,
+    .trace-agent small {
+      display: block;
+    }
+
+    .trace-agent strong {
+      overflow: hidden;
+      font-size: 0.73rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-agent small {
+      margin-top: 2px;
+      color: var(--cp-text-muted);
+      font-size: 0.61rem;
+    }
+
+    .trace-preview {
+      overflow: hidden;
+      color: var(--cp-text-muted);
+      font-size: 0.67rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-metric {
+      min-width: 62px;
+      color: var(--cp-text-muted);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.64rem;
+      text-align: right;
+    }
+
+    .trace-kind.model {
+      border-color: var(--cp-accent);
+      color: var(--cp-accent);
+    }
+
+    .trace-kind.non-ai {
+      border-color: var(--cp-success);
+      color: var(--cp-success);
+    }
+
+    .trace-kind.workflow {
+      color: var(--cp-text-muted);
+    }
+
+    .teaching-panel {
+      overflow: hidden;
+    }
+
+    .teaching-hero {
+      padding: 18px;
+      border-bottom: 1px solid var(--cp-border);
+      background: var(--cp-bg-elevated);
+    }
+
+    .teaching-hero h3 {
+      margin: 5px 0 0;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .teaching-section {
+      padding: 15px 17px;
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .teaching-section:last-child {
+      border-bottom: 0;
+    }
+
+    .teaching-section h4 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 7px;
+      font-size: 0.72rem;
+    }
+
+    .section-index {
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--cp-border);
+      border-radius: 6px;
+      color: var(--cp-accent);
+      font-size: 0.6rem;
+    }
+
+    .teaching-section p {
+      margin: 0;
+      color: var(--cp-text-muted);
+      font-size: 0.72rem;
+      line-height: 1.55;
+    }
+
+    .watchout {
+      border-left: 3px solid var(--cp-warning);
+    }
+
+    .takeaway-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .takeaway-list li {
+      position: relative;
+      padding-left: 16px;
+      color: var(--cp-text-muted);
+      font-size: 0.7rem;
+    }
+
+    .takeaway-list li::before {
+      position: absolute;
+      top: 0.52em;
+      left: 1px;
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--cp-success);
+      content: "";
+    }
+
+    .scope-section {
+      display: none;
+    }
+
+    .scope-section.visible {
+      display: block;
+    }
+
+    .scope-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .scope-chip {
+      max-width: 100%;
+      cursor: help;
+    }
+
+    .scope-chip strong {
+      color: var(--cp-accent);
+    }
+
+    .error-banner {
+      display: none;
+      padding: 10px 13px;
+      border: 1px solid var(--cp-danger);
+      border-radius: 0.625rem;
+      background: var(--cp-surface);
+      color: var(--cp-danger);
+      font-size: 0.72rem;
+    }
+
+    .error-banner.visible {
+      display: block;
+    }
+
+    .noscript {
+      margin: 20px;
+      padding: 14px;
+      border: 1px solid var(--cp-warning);
+      background: var(--cp-surface);
+      color: var(--cp-text);
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes edgeTravel {
+      to { stroke-dashoffset: -26; }
+    }
+
+    @keyframes nodePulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.025); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+      }
+    }
+
+    @media (max-width: 1250px) {
+      .workspace {
+        grid-template-columns: 220px minmax(0, 1fr);
+      }
+
+      .teaching-panel {
+        position: static;
+        grid-column: 2;
+        max-height: none;
+      }
+
+      .teaching-panel .teaching-body {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .teaching-section {
+        border-right: 1px solid var(--cp-border);
+      }
+    }
+
+    @media (max-width: 1050px) {
+      .app-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 12px 16px;
+      }
+
+      .header-title {
+        display: none;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        padding: 12px;
+      }
+
+      .pattern-rail,
+      .teaching-panel {
+        position: static;
+        grid-column: 1;
+        max-height: none;
+      }
+
+      .pattern-rail {
+        overflow: hidden;
+      }
+
+      .pattern-list {
+        display: flex;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .pattern-list::-webkit-scrollbar {
+        display: none;
+      }
+
+      .pattern-button {
+        min-width: 190px;
+      }
+
+      .pattern-button.active::before {
+        inset: auto 18px -9px;
+        width: auto;
+        height: 3px;
+      }
+
+      .rail-footer {
+        display: none;
+      }
+
+      .run-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .savings-card {
+        grid-column: 1 / -1;
+      }
+
+      .teaching-panel .teaching-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .app-header {
+        gap: 8px;
+      }
+
+      .status-pill {
+        display: none;
+      }
+
+      .workspace {
+        padding: 8px;
+      }
+
+      .pattern-hero {
+        grid-template-columns: 1fr;
+        padding: 16px;
+      }
+
+      .hero-impact {
+        min-width: 0;
+      }
+
+      .card-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .legend {
+        justify-content: flex-start;
+      }
+
+      .metrics-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .metric-card {
+        min-height: 92px;
+      }
+
+      .trace-item {
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+      }
+
+      .trace-preview,
+      .trace-item .trace-kind {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <noscript><div class="noscript">This interactive lab requires JavaScript.</div></noscript>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">Tƒ</div>
+      <div class="brand-copy">
+        <strong>TokenFlow Lab</strong>
+        <span>LangChain4j Agentic pattern simulator</span>
+      </div>
+    </div>
+    <div class="header-title">
+      <h1>Cost-conscious agent design patterns</h1>
+      <p>Run the flow. Inspect the scope. Challenge the estimate.</p>
+    </div>
+    <div class="header-actions">
+      <span class="status-pill"><i class="status-dot"></i><span id="runtimeStatus">Loading runtime</span></span>
+      <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="pattern-rail panel" aria-label="Token design patterns">
+      <div class="rail-heading">
+        <p class="eyebrow">Pattern library</p>
+        <span>8 flows</span>
+      </div>
+      <nav class="pattern-list" id="patternList"></nav>
+      <div class="rail-footer">
+        Percentages are projections, not guarantees. Batching is intentionally measured by throughput first.
+      </div>
+    </aside>
+
+    <section class="main-stage" aria-live="polite">
+      <article class="pattern-hero panel">
+        <div class="hero-copy">
+          <p class="eyebrow" id="patternKicker">Pattern 01</p>
+          <h2 id="patternTitle">Loading patterns…</h2>
+          <p id="patternHeadline"></p>
+        </div>
+        <div class="hero-impact">
+          <span id="metricLabel">Primary metric</span>
+          <strong id="patternImpact">—</strong>
+        </div>
+      </article>
+
+      <section class="flow-card panel" aria-labelledby="flowHeading">
+        <div class="card-header">
+          <div>
+            <h3 id="flowHeading">Agentic execution graph</h3>
+            <p>Nodes illuminate from AgentListener events and deterministic agent spans.</p>
+          </div>
+          <div class="legend" aria-label="Graph legend">
+            <span><i class="legend-model"></i>Model</span>
+            <span><i class="legend-non-ai"></i>Non-AI agent</span>
+            <span><i></i>State / orchestration</span>
+          </div>
+        </div>
+        <div class="flow-viewport" id="flowViewport">
+          <div class="flow-empty">Preparing graph…</div>
+        </div>
+      </section>
+
+      <div class="metrics-grid" aria-label="Run metrics">
+        <article class="metric-card savings-card card">
+          <div class="savings-gauge" id="savingsGauge"><strong id="savingsValue">—</strong></div>
+          <div class="metric-copy">
+            <span class="metric-label">Projected saving</span>
+            <span class="metric-foot" id="savingsFoot">Run a flow to compare</span>
+          </div>
+        </article>
+        <article class="metric-card card">
+          <div class="metric-copy">
+            <span class="metric-label">Modeled baseline</span>
+            <strong class="metric-value" id="baselineValue">—</strong>
+            <span class="metric-foot">token-equivalent</span>
+          </div>
+        </article>
+        <article class="metric-card card">
+          <div class="metric-copy">
+            <span class="metric-label">Observed</span>
+            <strong class="metric-value" id="observedValue">—</strong>
+            <span class="metric-foot" id="callsFoot">model tokens</span>
+          </div>
+        </article>
+        <article class="metric-card card">
+          <div class="metric-copy">
+            <span class="metric-label">Wall time</span>
+            <strong class="metric-value" id="durationValue">—</strong>
+            <span class="metric-foot" id="concurrencyFoot">end to end</span>
+          </div>
+        </article>
+        <article class="metric-card card">
+          <div class="metric-copy">
+            <span class="metric-label">Agentic steps</span>
+            <strong class="metric-value" id="stepsValue">—</strong>
+            <span class="metric-foot">including workflows</span>
+          </div>
+        </article>
+      </div>
+
+      <div class="error-banner" id="errorBanner" role="alert"></div>
+
+      <div class="run-grid">
+        <section class="runner-card panel" aria-labelledby="runnerHeading">
+          <div class="card-header">
+            <div>
+              <h3 id="runnerHeading">Run the pattern</h3>
+              <p id="modeDescription">Offline deterministic model · no key required</p>
+            </div>
+            <div class="mode-control" aria-label="Execution mode">
+              <button class="mode-button active" id="demoMode" type="button">Demo</button>
+              <button class="mode-button" id="liveMode" type="button">Live</button>
+            </div>
+          </div>
+          <div class="runner-body">
+            <label class="input-label" for="promptInput"><span>Developer request</span><span id="charCount">0 / 12,000</span></label>
+            <textarea id="promptInput" maxlength="12000" spellcheck="true"></textarea>
+            <div class="runner-actions">
+              <button class="primary-button" id="runButton" type="button">Run pattern</button>
+              <button class="secondary-button cache-reset" id="clearCacheButton" type="button">Clear cache</button>
+            </div>
+            <div class="run-note" id="runNote">The graph uses real LangChain4j Agentic builders. Demo mode replaces only the external model call.</div>
+          </div>
+        </section>
+
+        <section class="answer-card panel" aria-labelledby="answerHeading">
+          <div class="card-header">
+            <div>
+              <h3 id="answerHeading">Agent output</h3>
+              <p id="answerSubtitle">Waiting for a run</p>
+            </div>
+            <span class="mini-badge" id="runModeBadge">DEMO</span>
+          </div>
+          <div class="answer-body" id="answerBody">
+            <div class="answer-empty">
+              <div>
+                <div class="empty-orbit">→</div>
+                Select a pattern, edit its sample request, and run the flow.
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="trace-card panel" aria-labelledby="traceHeading">
+        <div class="card-header">
+          <div>
+            <h3 id="traceHeading">Execution trace</h3>
+            <p>Model calls include provider token usage; non-AI agents remain visible at zero tokens.</p>
+          </div>
+          <div class="trace-summary" id="traceSummary">No execution yet</div>
+        </div>
+        <div class="trace-list" id="traceList">
+          <div class="trace-placeholder">Agent invocations will appear here in start order.</div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="teaching-panel panel" aria-label="Pattern teaching notes">
+      <div class="teaching-hero">
+        <p class="eyebrow">Teaching notes</p>
+        <h3 id="teachingTitle">Pattern anatomy</h3>
+      </div>
+      <div class="teaching-body">
+        <section class="teaching-section">
+          <h4><span class="section-index">01</span>How it works</h4>
+          <p id="mechanismText">Loading…</p>
+        </section>
+        <section class="teaching-section">
+          <h4><span class="section-index">02</span>Best fit</h4>
+          <p id="bestForText">Loading…</p>
+        </section>
+        <section class="teaching-section watchout">
+          <h4><span class="section-index">!</span>Watch out</h4>
+          <p id="watchOutText">Loading…</p>
+        </section>
+        <section class="teaching-section" id="takeawaySection">
+          <h4><span class="section-index">03</span>What this run proved</h4>
+          <ul class="takeaway-list" id="takeawayList">
+            <li>Run the selected pattern to populate evidence.</li>
+          </ul>
+        </section>
+        <section class="teaching-section scope-section" id="scopeSection">
+          <h4><span class="section-index">S</span>AgenticScope</h4>
+          <div class="scope-list" id="scopeList"></div>
+        </section>
+        <section class="teaching-section">
+          <p>Built with <a href="https://docs.langchain4j.dev/tutorials/agents/" target="_blank" rel="noreferrer">LangChain4j Agentic AI</a>. The module is experimental; pin and test its version.</p>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const state = {
+      patterns: [],
+      current: null,
+      config: null,
+      mode: "demo",
+      animationToken: 0,
+      graph: null
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const svgNs = "http://www.w3.org/2000/svg";
+
+    const elements = {
+      patternList: $("#patternList"),
+      patternKicker: $("#patternKicker"),
+      patternTitle: $("#patternTitle"),
+      patternHeadline: $("#patternHeadline"),
+      patternImpact: $("#patternImpact"),
+      metricLabel: $("#metricLabel"),
+      flowViewport: $("#flowViewport"),
+      promptInput: $("#promptInput"),
+      charCount: $("#charCount"),
+      runButton: $("#runButton"),
+      clearCacheButton: $("#clearCacheButton"),
+      demoMode: $("#demoMode"),
+      liveMode: $("#liveMode"),
+      modeDescription: $("#modeDescription"),
+      runModeBadge: $("#runModeBadge"),
+      runNote: $("#runNote"),
+      answerBody: $("#answerBody"),
+      answerSubtitle: $("#answerSubtitle"),
+      errorBanner: $("#errorBanner"),
+      savingsGauge: $("#savingsGauge"),
+      savingsValue: $("#savingsValue"),
+      savingsFoot: $("#savingsFoot"),
+      baselineValue: $("#baselineValue"),
+      observedValue: $("#observedValue"),
+      durationValue: $("#durationValue"),
+      stepsValue: $("#stepsValue"),
+      callsFoot: $("#callsFoot"),
+      concurrencyFoot: $("#concurrencyFoot"),
+      traceList: $("#traceList"),
+      traceSummary: $("#traceSummary"),
+      teachingTitle: $("#teachingTitle"),
+      mechanismText: $("#mechanismText"),
+      bestForText: $("#bestForText"),
+      watchOutText: $("#watchOutText"),
+      takeawayList: $("#takeawayList"),
+      scopeSection: $("#scopeSection"),
+      scopeList: $("#scopeList"),
+      runtimeStatus: $("#runtimeStatus")
+    };
+
+    function createElement(tag, className, text) {
+      const element = document.createElement(tag);
+      if (className) element.className = className;
+      if (text !== undefined) element.textContent = text;
+      return element;
+    }
+
+    function svgElement(tag, attributes = {}) {
+      const element = document.createElementNS(svgNs, tag);
+      Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, String(value)));
+      return element;
+    }
+
+    async function loadApplication() {
+      try {
+        const [patternsResponse, configResponse] = await Promise.all([
+          fetch("/api/patterns"),
+          fetch("/api/config")
+        ]);
+        if (!patternsResponse.ok || !configResponse.ok) throw new Error("The application API is not available.");
+        state.patterns = await patternsResponse.json();
+        state.config = await configResponse.json();
+        elements.runtimeStatus.textContent = `Agentic ${state.config.agenticVersion}`;
+        elements.liveMode.disabled = !state.config.liveEnabled;
+        elements.liveMode.title = state.config.liveEnabled
+          ? `Use ${state.config.liveModels}`
+          : "Set OPENAI_API_KEY before startup to enable live mode";
+        renderPatternList();
+        selectPattern(state.patterns[0]?.id);
+      } catch (error) {
+        showError(error.message);
+        elements.runtimeStatus.textContent = "Runtime unavailable";
+      }
+    }
+
+    function renderPatternList() {
+      elements.patternList.replaceChildren();
+      state.patterns.forEach((pattern) => {
+        const button = createElement("button", "pattern-button");
+        button.type = "button";
+        button.dataset.patternId = pattern.id;
+        button.setAttribute("aria-label", `Pattern ${pattern.order}: ${pattern.name}`);
+        button.addEventListener("click", () => selectPattern(pattern.id));
+
+        const number = createElement("span", "pattern-number", String(pattern.order).padStart(2, "0"));
+        const label = createElement("span", "pattern-label");
+        label.append(createElement("strong", "", pattern.name));
+        label.append(createElement("small", "", pattern.savingsRange));
+        button.append(number, label);
+        elements.patternList.append(button);
+      });
+    }
+
+    function selectPattern(id) {
+      const pattern = state.patterns.find((candidate) => candidate.id === id);
+      if (!pattern) return;
+      state.current = pattern;
+      state.animationToken += 1;
+      document.querySelectorAll(".pattern-button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.patternId === id);
+        button.setAttribute("aria-current", button.dataset.patternId === id ? "true" : "false");
+      });
+
+      elements.patternKicker.textContent = `Pattern ${String(pattern.order).padStart(2, "0")}`;
+      elements.patternTitle.textContent = pattern.name;
+      elements.patternHeadline.textContent = pattern.headline;
+      elements.patternImpact.textContent = pattern.savingsRange;
+      elements.metricLabel.textContent = pattern.primaryMetric;
+      elements.promptInput.value = pattern.sampleInput;
+      updateCharCount();
+      elements.runButton.textContent = `Run ${pattern.name}`;
+      elements.clearCacheButton.classList.toggle("visible", pattern.id === "caching");
+      elements.runNote.textContent = pattern.id === "caching"
+        ? "Run this exact prompt twice: the second execution should take the hit path with zero model calls."
+        : pattern.id === "batching"
+          ? "Separate up to six independent items with semicolons. Parallelism improves wall time, not content tokens by itself."
+          : "The graph uses real LangChain4j Agentic builders. Demo mode replaces only the external model call.";
+      elements.teachingTitle.textContent = pattern.name;
+      elements.mechanismText.textContent = pattern.mechanism;
+      elements.bestForText.textContent = pattern.bestFor;
+      elements.watchOutText.textContent = pattern.watchOut;
+      resetRunPanels();
+      renderFlow(pattern);
+    }
+
+    function renderFlow(pattern) {
+      const svg = svgElement("svg", {
+        id: "flowSvg",
+        viewBox: "0 0 1000 310",
+        role: "img",
+        "aria-label": `${pattern.name} agentic flow`
+      });
+      const defs = svgElement("defs");
+      const marker = svgElement("marker", {
+        id: "flowArrow",
+        markerWidth: "8",
+        markerHeight: "8",
+        refX: "7",
+        refY: "4",
+        orient: "auto",
+        markerUnits: "strokeWidth"
+      });
+      marker.append(svgElement("path", { d: "M0,0 L8,4 L0,8 Z", class: "arrow-head" }));
+      defs.append(marker);
+      svg.append(defs);
+
+      const nodePositions = new Map();
+      pattern.nodes.forEach((node) => {
+        nodePositions.set(node.id, {
+          x: Math.max(70, Math.min(930, node.x * 10)),
+          y: Math.max(44, Math.min(266, 22 + node.y * 2.66))
+        });
+      });
+
+      const edgeLayer = svgElement("g", { class: "edge-layer" });
+      pattern.edges.forEach((edge, index) => {
+        const from = nodePositions.get(edge.from);
+        const to = nodePositions.get(edge.to);
+        if (!from || !to) return;
+        const horizontalDirection = to.x >= from.x ? 1 : -1;
+        const startX = from.x + horizontalDirection * 66;
+        const endX = to.x - horizontalDirection * 66;
+        const controlOffset = Math.max(24, Math.abs(endX - startX) * 0.44);
+        const path = svgElement("path", {
+          d: `M ${startX} ${from.y} C ${startX + horizontalDirection * controlOffset} ${from.y}, ${endX - horizontalDirection * controlOffset} ${to.y}, ${endX} ${to.y}`,
+          class: `flow-edge${edge.dashed ? " dashed" : ""}`,
+          "data-edge-index": index,
+          "data-from": edge.from,
+          "data-to": edge.to,
+          "marker-end": "url(#flowArrow)"
+        });
+        edgeLayer.append(path);
+        if (edge.label) {
+          const label = svgElement("text", {
+            x: (startX + endX) / 2,
+            y: (from.y + to.y) / 2 - 7,
+            class: "edge-label"
+          });
+          label.textContent = edge.label;
+          edgeLayer.append(label);
+        }
+      });
+      svg.append(edgeLayer);
+
+      const nodeLayer = svgElement("g", { class: "node-layer" });
+      pattern.nodes.forEach((node) => {
+        const position = nodePositions.get(node.id);
+        const group = svgElement("g", {
+          class: "flow-node",
+          transform: `translate(${position.x} ${position.y})`,
+          "data-node-id": node.id,
+          "data-kind": node.kind,
+          tabindex: "0",
+          role: "group",
+          "aria-label": `${node.label}: ${node.caption}`
+        });
+        group.append(svgElement("rect", {
+          x: "-66",
+          y: "-30",
+          width: "132",
+          height: "60",
+          rx: "10",
+          class: "node-body"
+        }));
+        group.append(svgElement("circle", { cx: "-44", cy: "0", r: "13", class: "node-icon-bg" }));
+        const icon = svgElement("text", { x: "-44", y: "4", class: "node-icon" });
+        icon.textContent = nodeSymbol(node.kind);
+        group.append(icon);
+        const label = svgElement("text", { x: "-24", y: "-3", class: "node-label" });
+        label.textContent = node.label;
+        group.append(label);
+        const caption = svgElement("text", { x: "-24", y: "14", class: "node-caption" });
+        caption.textContent = node.caption;
+        group.append(caption);
+        nodeLayer.append(group);
+      });
+      svg.append(nodeLayer);
+      elements.flowViewport.replaceChildren(svg);
+      state.graph = { svg, nodePositions };
+    }
+
+    function nodeSymbol(kind) {
+      const symbols = {
+        user: "U",
+        orchestrator: "↗",
+        "model-small": "S",
+        "model-medium": "M",
+        "model-large": "L",
+        data: "D",
+        tool: "ƒ",
+        cache: "C",
+        plan: "P",
+        batch: "B",
+        output: "✓"
+      };
+      return symbols[kind] || "·";
+    }
+
+    function resetRunPanels() {
+      hideError();
+      resetMetrics();
+      elements.answerSubtitle.textContent = "Waiting for a run";
+      elements.answerBody.replaceChildren(emptyAnswer());
+      elements.traceSummary.textContent = "No execution yet";
+      elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "Agent invocations will appear here in start order."));
+      elements.takeawayList.replaceChildren(createElement("li", "", "Run the selected pattern to populate evidence."));
+      elements.scopeSection.classList.remove("visible");
+      elements.scopeList.replaceChildren();
+    }
+
+    function emptyAnswer() {
+      const wrapper = createElement("div", "answer-empty");
+      const inner = createElement("div");
+      inner.append(createElement("div", "empty-orbit", "→"));
+      inner.append(document.createTextNode("Select a pattern, edit its sample request, and run the flow."));
+      wrapper.append(inner);
+      return wrapper;
+    }
+
+    function resetMetrics() {
+      elements.savingsGauge.style.setProperty("--progress", "0deg");
+      elements.savingsValue.textContent = "—";
+      elements.savingsFoot.textContent = "Run a flow to compare";
+      elements.baselineValue.textContent = "—";
+      elements.observedValue.textContent = "—";
+      elements.durationValue.textContent = "—";
+      elements.stepsValue.textContent = "—";
+      elements.callsFoot.textContent = "model tokens";
+      elements.concurrencyFoot.textContent = "end to end";
+    }
+
+    function setMode(mode) {
+      if (mode === "live" && !state.config?.liveEnabled) return;
+      state.mode = mode;
+      elements.demoMode.classList.toggle("active", mode === "demo");
+      elements.liveMode.classList.toggle("active", mode === "live");
+      elements.runModeBadge.textContent = mode.toUpperCase();
+      elements.modeDescription.textContent = mode === "demo"
+        ? "Offline deterministic model · no key required"
+        : state.config.liveModels;
+    }
+
+    async function runCurrentPattern() {
+      if (!state.current || !elements.promptInput.value.trim()) return;
+      hideError();
+      state.animationToken += 1;
+      const runToken = state.animationToken;
+      setRunning(true);
+      resetGraphState();
+      elements.answerSubtitle.textContent = "Agentic workflow executing";
+      const loading = createElement("div", "answer-loading");
+      const loadingInner = createElement("div");
+      loadingInner.append(createElement("div", "spinner"));
+      loadingInner.append(document.createTextNode("Building AgenticScope and invoking the selected path…"));
+      loading.append(loadingInner);
+      elements.answerBody.replaceChildren(loading);
+      elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "Collecting inherited AgentListener events…"));
+
+      try {
+        const response = await fetch("/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patternId: state.current.id,
+            input: elements.promptInput.value.trim(),
+            mode: state.mode
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || payload.message || "The pattern run failed.");
+        if (runToken !== state.animationToken) return;
+        renderRun(payload);
+        await animateTrace(payload.trace, runToken);
+      } catch (error) {
+        if (runToken === state.animationToken) {
+          showError(error.message);
+          elements.answerSubtitle.textContent = "Run failed";
+          elements.answerBody.replaceChildren(createElement("div", "answer-empty", error.message));
+        }
+      } finally {
+        if (runToken === state.animationToken) setRunning(false);
+      }
+    }
+
+    function setRunning(running) {
+      elements.runButton.disabled = running;
+      elements.runButton.textContent = running ? "Running agentic flow…" : `Run ${state.current?.name || "pattern"}`;
+      elements.promptInput.disabled = running;
+      elements.demoMode.disabled = running;
+      elements.liveMode.disabled = running || !state.config?.liveEnabled;
+    }
+
+    function renderRun(result) {
+      const output = createElement("pre", "answer-output", result.output);
+      const meta = createElement("div", "answer-meta");
+      meta.append(createElement("span", "mini-badge", result.mode.toUpperCase()));
+      meta.append(createElement("span", "mini-badge", `${result.metrics.modelCalls} model call${result.metrics.modelCalls === 1 ? "" : "s"}`));
+      if (result.metrics.cacheHit) meta.append(createElement("span", "mini-badge", "CACHE HIT"));
+      const wrapper = document.createDocumentFragment();
+      wrapper.append(output, meta);
+      elements.answerBody.replaceChildren(wrapper);
+      elements.answerSubtitle.textContent = `Completed · ${new Date(result.completedAt).toLocaleTimeString()}`;
+
+      renderMetrics(result.metrics);
+      renderTrace(result.trace);
+      renderTakeaways(result.takeaways);
+      renderScope(result.scope);
+    }
+
+    function renderMetrics(metrics) {
+      const percent = Math.max(0, Math.min(100, metrics.projectedSavingsPercent));
+      elements.savingsGauge.style.setProperty("--progress", `${percent * 3.6}deg`);
+      elements.savingsValue.textContent = `${percent}%`;
+      elements.savingsFoot.textContent = metrics.cacheHit ? "cache hit avoided generation" : `${formatNumber(metrics.avoidedTokens)} tokens projected`;
+      elements.baselineValue.textContent = formatNumber(metrics.projectedBaselineTokens);
+      elements.observedValue.textContent = formatNumber(metrics.observedTokens);
+      elements.durationValue.textContent = `${formatNumber(metrics.durationMs)}ms`;
+      elements.stepsValue.textContent = formatNumber(metrics.orchestrationSteps);
+      elements.callsFoot.textContent = `${metrics.modelCalls} model call${metrics.modelCalls === 1 ? "" : "s"}`;
+      elements.concurrencyFoot.textContent = metrics.concurrency > 1 ? `${metrics.concurrency} concurrent items` : "end to end";
+      elements.savingsGauge.title = metrics.basis;
+    }
+
+    function renderTrace(trace) {
+      elements.traceList.replaceChildren();
+      elements.traceSummary.textContent = `${trace.length} invocations · start order`;
+      trace.forEach((event) => {
+        const item = createElement("div", "trace-item");
+        item.dataset.sequence = event.sequence;
+        item.append(createElement("span", "trace-sequence", String(event.sequence).padStart(2, "0")));
+
+        const agent = createElement("div", "trace-agent");
+        agent.append(createElement("strong", "", event.agent));
+        agent.append(createElement("small", "", event.model || event.kind));
+        item.append(agent);
+
+        item.append(createElement("span", "trace-preview", event.outputPreview || event.inputPreview || "No payload"));
+        item.append(createElement("span", `trace-kind ${event.kind}`, event.kind));
+        const tokenTotal = event.inputTokens + event.outputTokens;
+        item.append(createElement("span", "trace-metric", tokenTotal ? `${tokenTotal} tok · ${event.durationMs}ms` : `${event.durationMs}ms`));
+        elements.traceList.append(item);
+      });
+    }
+
+    async function animateTrace(trace, runToken) {
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      let previousNode = "";
+      for (const event of trace) {
+        if (runToken !== state.animationToken) return;
+        const traceItem = elements.traceList.querySelector(`[data-sequence="${event.sequence}"]`);
+        traceItem?.classList.add("revealed");
+        if (event.nodeId) {
+          activateNode(event.nodeId, previousNode, event.status);
+          previousNode = event.nodeId;
+        }
+        if (!reducedMotion) await delay(280);
+      }
+      if (runToken !== state.animationToken) return;
+      finishGraph(previousNode);
+    }
+
+    function activateNode(nodeId, previousNode, status) {
+      const svg = state.graph?.svg;
+      if (!svg) return;
+      svg.querySelectorAll(".flow-node.active").forEach((node) => {
+        node.classList.remove("active");
+        node.classList.add("visited");
+      });
+      svg.querySelectorAll(".flow-edge.active").forEach((edge) => {
+        edge.classList.remove("active");
+        edge.classList.add("visited");
+      });
+      const node = svg.querySelector(`[data-node-id="${cssEscape(nodeId)}"]`);
+      node?.classList.add(status === "failed" ? "failed" : "active");
+      const path = previousNode ? flowPath(previousNode, nodeId) : [];
+      if (path.length) {
+        path.forEach((step) => {
+          svg.querySelector(`.flow-edge[data-from="${cssEscape(step.from)}"][data-to="${cssEscape(step.to)}"]`)?.classList.add("active");
+          if (step.to !== nodeId) svg.querySelector(`[data-node-id="${cssEscape(step.to)}"]`)?.classList.add("visited");
+        });
+      } else {
+        svg.querySelector(`.flow-edge[data-to="${cssEscape(nodeId)}"]`)?.classList.add("active");
+      }
+    }
+
+    function finishGraph(previousNode) {
+      const svg = state.graph?.svg;
+      if (!svg) return;
+      svg.querySelectorAll(".flow-node.active").forEach((node) => {
+        node.classList.remove("active");
+        node.classList.add("visited");
+      });
+      svg.querySelectorAll(".flow-edge.active").forEach((edge) => {
+        edge.classList.remove("active");
+        edge.classList.add("visited");
+      });
+      const output = svg.querySelector('[data-node-id="output"]');
+      if (output) {
+        output.classList.add("visited");
+        flowPath(previousNode, "output").forEach((step) => {
+          svg.querySelector(`.flow-edge[data-from="${cssEscape(step.from)}"][data-to="${cssEscape(step.to)}"]`)?.classList.add("visited");
+          svg.querySelector(`[data-node-id="${cssEscape(step.to)}"]`)?.classList.add("visited");
+        });
+      }
+    }
+
+    function flowPath(start, destination) {
+      if (!start || !destination || start === destination || !state.current) return [];
+      const queue = [{ node: start, path: [] }];
+      const visited = new Set([start]);
+      while (queue.length) {
+        const current = queue.shift();
+        for (const edge of state.current.edges.filter((candidate) => candidate.from === current.node)) {
+          const nextPath = [...current.path, edge];
+          if (edge.to === destination) return nextPath;
+          if (!visited.has(edge.to)) {
+            visited.add(edge.to);
+            queue.push({ node: edge.to, path: nextPath });
+          }
+        }
+      }
+      return [];
+    }
+
+    function resetGraphState() {
+      const svg = state.graph?.svg;
+      if (!svg) return;
+      svg.querySelectorAll(".active, .visited, .failed").forEach((element) => element.classList.remove("active", "visited", "failed"));
+    }
+
+    function renderTakeaways(takeaways) {
+      elements.takeawayList.replaceChildren();
+      takeaways.forEach((takeaway) => elements.takeawayList.append(createElement("li", "", takeaway)));
+    }
+
+    function renderScope(scope) {
+      const entries = Object.entries(scope || {}).slice(0, 8);
+      elements.scopeSection.classList.toggle("visible", entries.length > 0);
+      elements.scopeList.replaceChildren();
+      entries.forEach(([key, value]) => {
+        const chip = createElement("span", "scope-chip");
+        const keyElement = createElement("strong", "", key);
+        chip.append(keyElement, document.createTextNode(` · ${compactValue(value)}`));
+        chip.title = typeof value === "string" ? value : JSON.stringify(value);
+        elements.scopeList.append(chip);
+      });
+    }
+
+    function compactValue(value) {
+      const text = typeof value === "string" ? value : JSON.stringify(value);
+      return text.length <= 28 ? text : `${text.slice(0, 27)}…`;
+    }
+
+    async function clearCache() {
+      try {
+        const response = await fetch("/api/cache", { method: "DELETE" });
+        if (!response.ok) throw new Error("The cache could not be cleared.");
+        elements.runNote.textContent = "Cache cleared. The next request will take the miss path and repopulate it.";
+        resetRunPanels();
+        renderFlow(state.current);
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function updateCharCount() {
+      elements.charCount.textContent = `${formatNumber(elements.promptInput.value.length)} / 12,000`;
+    }
+
+    function formatNumber(value) {
+      return new Intl.NumberFormat().format(value);
+    }
+
+    function cssEscape(value) {
+      return window.CSS?.escape ? window.CSS.escape(value) : String(value).replace(/[^a-zA-Z0-9_-]/g, "");
+    }
+
+    function delay(milliseconds) {
+      return new Promise((resolve) => setTimeout(resolve, milliseconds));
+    }
+
+    function showError(message) {
+      elements.errorBanner.textContent = message;
+      elements.errorBanner.classList.add("visible");
+    }
+
+    function hideError() {
+      elements.errorBanner.classList.remove("visible");
+      elements.errorBanner.textContent = "";
+    }
+
+    elements.runButton.addEventListener("click", runCurrentPattern);
+    elements.clearCacheButton.addEventListener("click", clearCache);
+    elements.demoMode.addEventListener("click", () => setMode("demo"));
+    elements.liveMode.addEventListener("click", () => setMode("live"));
+    elements.promptInput.addEventListener("input", updateCharCount);
+    elements.promptInput.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") runCurrentPattern();
+    });
+    $("#themeToggle").addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme");
+      document.documentElement.setAttribute("data-theme", current === "dark" ? "light" : "dark");
+    });
+
+    loadApplication();
+  </script>
+</body>
+</html>
