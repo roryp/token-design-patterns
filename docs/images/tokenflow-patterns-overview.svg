@@ -1,0 +1,357 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">TokenFlow Lab agent design patterns for deliberate token spend</title>
+  <desc id="description">Eight LangChain4j Agentic patterns: router, triage, context compression, retrieval augmented generation, tool use, step-back planning, caching, and batching. Savings figures are projections; batching emphasizes throughput and does not claim automatic token savings.</desc>
+  <defs>
+    <linearGradient id="pageBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071426"/>
+      <stop offset="0.55" stop-color="#10243e"/>
+      <stop offset="1" stop-color="#08192e"/>
+    </linearGradient>
+    <linearGradient id="headerGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fd8ea1" stop-opacity="0.08"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#4da6ff" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="cardFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f7f8fb"/>
+    </linearGradient>
+    <linearGradient id="footerFill" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d1d33"/>
+      <stop offset="1" stop-color="#122a49"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.025" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="145%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020817" flood-opacity="0.28"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#10243e" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L8 4L0 8Z" fill="context-stroke"/>
+    </marker>
+    <style><![CDATA[
+      text { font-family: "Segoe UI", Aptos, Calibri, Arial, sans-serif; }
+      .card { fill: url(#cardFill); stroke: #d8dee8; stroke-width: 1.2; }
+      .card-title { fill: #10213b; font-size: 17px; font-weight: 800; letter-spacing: 0.4px; }
+      .card-subtitle { fill: #64748b; font-size: 11px; font-weight: 600; }
+      .flow-label { fill: #334155; font-size: 10px; font-weight: 700; text-anchor: middle; }
+      .tiny { fill: #64748b; font-size: 9px; font-weight: 600; text-anchor: middle; }
+      .note { fill: #475569; font-size: 11px; font-weight: 600; text-anchor: middle; }
+      .node { fill: #ffffff; stroke: #9aa8bb; stroke-width: 1.4; }
+      .agent { fill: #fff1f3; stroke: #b11f4b; stroke-width: 1.8; }
+      .data { fill: #f1f5f9; stroke: #64748b; stroke-width: 1.4; }
+      .tool { fill: #fffbeb; stroke: #d97706; stroke-width: 1.7; }
+      .cache { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 1.7; }
+      .model-small { fill: #eff6ff; stroke: #2563eb; stroke-width: 1.8; }
+      .model-medium { fill: #fffbeb; stroke: #d97706; stroke-width: 1.8; }
+      .model-large { fill: #ecfdf5; stroke: #15803d; stroke-width: 1.8; }
+      .connector { fill: none; stroke: #708198; stroke-width: 1.55; marker-end: url(#arrow); }
+      .connector-dashed { fill: none; stroke: #708198; stroke-width: 1.45; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+      .metric { font-size: 12px; font-weight: 800; text-anchor: middle; }
+      .metric-label { fill: #64748b; font-size: 9.5px; font-weight: 650; text-anchor: middle; }
+      .glyph { fill: #10213b; font-size: 15px; font-weight: 800; text-anchor: middle; dominant-baseline: middle; }
+      .model-glyph { font-size: 13px; font-weight: 850; text-anchor: middle; dominant-baseline: middle; }
+    ]]></style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#pageBg)"/>
+  <rect width="1600" height="900" fill="url(#grid)"/>
+  <rect x="22" y="18" width="1556" height="864" rx="22" fill="none" stroke="#ffffff" stroke-opacity="0.09"/>
+
+  <g aria-label="Header">
+    <rect x="30" y="26" width="1540" height="100" rx="18" fill="url(#headerGlow)"/>
+    <g transform="translate(58 47)">
+      <rect width="58" height="58" rx="14" fill="#fd8ea1" fill-opacity="0.12" stroke="#fd8ea1" stroke-opacity="0.72"/>
+      <text x="29" y="37" text-anchor="middle" fill="#ffffff" font-size="24" font-weight="850">Tƒ</text>
+    </g>
+    <text x="138" y="66" fill="#fd8ea1" font-size="13" font-weight="800" letter-spacing="2.2">TOKENFLOW LAB</text>
+    <text x="138" y="100" fill="#ffffff" font-size="31" font-weight="800" letter-spacing="0.2">Agent design patterns for deliberate token spend</text>
+    <g transform="translate(1275 47)">
+      <rect width="252" height="54" rx="27" fill="#ffffff" fill-opacity="0.07" stroke="#ffffff" stroke-opacity="0.2"/>
+      <circle cx="28" cy="27" r="10" fill="#4ade80"/>
+      <path d="M23 27l3 3 7-8" fill="none" stroke="#0d1d33" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="50" y="24" fill="#ffffff" font-size="12" font-weight="750">LangChain4j Agentic</text>
+      <text x="50" y="41" fill="#afbdd0" font-size="10.5" font-weight="600">Demo + Azure GPT-5.6</text>
+    </g>
+  </g>
+
+  <!-- Card 1: Router -->
+  <g transform="translate(42 145)" filter="url(#shadow)" aria-label="Router pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#b11f4b"/>
+    <circle cx="34" cy="35" r="20" fill="#b11f4b"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">1</text>
+    <text class="card-title" x="63" y="31">ROUTER</text>
+    <text class="card-subtitle" x="63" y="50">Classify → one specialist path</text>
+
+    <g transform="translate(0 2)">
+      <circle class="node" cx="35" cy="138" r="19"/>
+      <text class="glyph" x="35" y="138">U</text>
+      <path class="connector" d="M55 138H94"/>
+      <rect class="agent" x="96" y="111" width="56" height="54" rx="14"/>
+      <circle cx="124" cy="138" r="7" fill="#b11f4b"/>
+      <path d="M114 138h20M124 128v20" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+      <path class="connector" d="M152 138C186 138 183 94 223 94"/>
+      <path class="connector" d="M152 138H223"/>
+      <path class="connector" d="M152 138C186 138 183 182 223 182"/>
+      <circle class="model-small" cx="243" cy="94" r="19"/>
+      <text class="model-glyph" x="243" y="94" fill="#2563eb">S</text>
+      <circle class="model-medium" cx="243" cy="138" r="19"/>
+      <text class="model-glyph" x="243" y="138" fill="#d97706">M</text>
+      <circle class="model-large" cx="243" cy="182" r="19"/>
+      <text class="model-glyph" x="243" y="182" fill="#15803d">L</text>
+      <text class="flow-label" x="302" y="91">Luna · knowledge</text>
+      <text class="flow-label" x="302" y="135">Terra · code</text>
+      <text class="flow-label" x="302" y="179">Sol · architecture</text>
+      <text class="tiny" x="124" y="181">Luna classifier</text>
+    </g>
+    <text class="note" x="182" y="230">Only the selected specialist invokes</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#ecfdf5" stroke="#bbf7d0"/>
+    <text class="metric" x="182" y="271" fill="#15803d">↓ 60–80% projected</text>
+  </g>
+
+  <!-- Card 2: Triage -->
+  <g transform="translate(425 145)" filter="url(#shadow)" aria-label="Triage pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#15803d"/>
+    <circle cx="34" cy="35" r="20" fill="#15803d"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">2</text>
+    <text class="card-title" x="63" y="31">TRIAGE</text>
+    <text class="card-subtitle" x="63" y="50">Zero-token gate → fit-for-work model</text>
+
+    <circle class="node" cx="37" cy="140" r="19"/>
+    <text class="glyph" x="37" y="140">U</text>
+    <path class="connector" d="M57 140H99"/>
+    <path d="M103 112h58l-21 24v28l-16 8v-36z" fill="#ecfdf5" stroke="#15803d" stroke-width="1.8" stroke-linejoin="round"/>
+    <text class="tiny" x="132" y="102">deterministic gate</text>
+    <path class="connector" d="M161 132C198 132 198 106 230 106"/>
+    <path class="connector" d="M161 150C198 150 198 178 230 178"/>
+    <circle class="model-small" cx="250" cy="106" r="20"/>
+    <text class="model-glyph" x="250" y="106" fill="#2563eb">S</text>
+    <circle class="model-large" cx="250" cy="178" r="20"/>
+    <text class="model-glyph" x="250" y="178" fill="#15803d">L</text>
+    <text class="flow-label" x="309" y="103">Luna · simple</text>
+    <text class="flow-label" x="309" y="175">Sol · complex</text>
+    <text class="note" x="182" y="230">Escalate only when complexity earns it</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#ecfdf5" stroke="#bbf7d0"/>
+    <text class="metric" x="182" y="271" fill="#15803d">↓ 50–70% projected</text>
+  </g>
+
+  <!-- Card 3: Context compression -->
+  <g transform="translate(808 145)" filter="url(#shadow)" aria-label="Context compression pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#2563eb"/>
+    <circle cx="34" cy="35" r="20" fill="#2563eb"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">3</text>
+    <text class="card-title" x="63" y="31">CONTEXT COMPRESSION</text>
+    <text class="card-subtitle" x="63" y="50">Transcript → durable working set</text>
+
+    <g transform="translate(0 1)">
+      <rect class="data" x="24" y="112" width="35" height="49" rx="3"/>
+      <rect class="data" x="31" y="105" width="35" height="49" rx="3"/>
+      <rect class="data" x="38" y="98" width="35" height="49" rx="3"/>
+      <path class="connector" d="M76 123H116"/>
+      <rect class="agent" x="119" y="98" width="56" height="54" rx="14"/>
+      <path d="M133 112h28M137 120h20M141 128h12M139 136h16" stroke="#b11f4b" stroke-width="2" stroke-linecap="round"/>
+      <path class="connector" d="M175 125H216"/>
+      <rect class="data" x="220" y="107" width="42" height="38" rx="5"/>
+      <path d="M229 118h24M229 126h18M229 134h21" stroke="#64748b" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="connector" d="M263 126H297"/>
+      <circle class="model-large" cx="318" cy="126" r="21"/>
+      <text class="model-glyph" x="318" y="126" fill="#15803d">L</text>
+      <text class="tiny" x="50" y="180">long context</text>
+      <text class="tiny" x="147" y="180">Luna compresses</text>
+      <text class="tiny" x="241" y="180">compactContext</text>
+      <text class="tiny" x="318" y="180">Sol reasons</text>
+    </g>
+    <text class="note" x="182" y="230">The large model never sees the full transcript</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text class="metric" x="182" y="271" fill="#2563eb">↓ 30–60% projected</text>
+  </g>
+
+  <!-- Card 4: RAG -->
+  <g transform="translate(1191 145)" filter="url(#shadow)" aria-label="Retrieval augmented generation pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#f97316"/>
+    <circle cx="34" cy="35" r="20" fill="#f97316"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">4</text>
+    <text class="card-title" x="63" y="27">RETRIEVAL AUGMENTED</text>
+    <text class="card-title" x="63" y="48">GENERATION (RAG)</text>
+    <text class="card-subtitle" x="63" y="66">Question → top-2 chunks → grounded answer</text>
+
+    <circle class="node" cx="33" cy="142" r="18"/>
+    <text class="glyph" x="33" y="142">?</text>
+    <path class="connector" d="M52 142H91"/>
+    <circle cx="113" cy="142" r="22" fill="#fff7ed" stroke="#f97316" stroke-width="1.8"/>
+    <circle cx="108" cy="136" r="8" fill="none" stroke="#f97316" stroke-width="2.2"/>
+    <path d="M114 142l8 8" stroke="#f97316" stroke-width="2.2" stroke-linecap="round"/>
+    <path class="connector" d="M136 142H176"/>
+    <rect class="data" x="181" y="102" width="52" height="35" rx="5"/>
+    <rect class="data" x="181" y="147" width="52" height="35" rx="5"/>
+    <path d="M190 113h34M190 121h28M190 158h34M190 166h24" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/>
+    <path class="connector" d="M235 142H287"/>
+    <circle class="model-medium" cx="310" cy="142" r="22"/>
+    <text class="model-glyph" x="310" y="142" fill="#d97706">M</text>
+    <text class="tiny" x="113" y="190">local retriever</text>
+    <text class="tiny" x="207" y="203">selected evidence</text>
+    <text class="tiny" x="310" y="190">Terra generates</text>
+    <text class="note" x="182" y="230">Retrieve evidence instead of sending the corpus</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#fff7ed" stroke="#fed7aa"/>
+    <text class="metric" x="182" y="271" fill="#c2410c">↓ 40–60% projected</text>
+  </g>
+
+  <!-- Card 5: Tool use -->
+  <g transform="translate(42 465)" filter="url(#shadow)" aria-label="Tool use pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#0f766e"/>
+    <circle cx="34" cy="35" r="20" fill="#0f766e"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">5</text>
+    <text class="card-title" x="63" y="31">TOOL USE</text>
+    <text class="card-subtitle" x="63" y="50">Exact work outside probabilistic generation</text>
+
+    <circle class="node" cx="35" cy="139" r="19"/>
+    <text class="glyph" x="35" y="139">U</text>
+    <path class="connector" d="M55 139H103"/>
+    <rect class="tool" x="106" y="105" width="92" height="68" rx="12"/>
+    <text x="152" y="130" text-anchor="middle" fill="#92400e" font-size="12" font-weight="800">JAVA TOOL</text>
+    <text x="152" y="150" text-anchor="middle" fill="#a16207" font-size="10" font-weight="650">deterministic math</text>
+    <path class="connector" d="M199 139H260"/>
+    <circle class="model-small" cx="283" cy="139" r="22"/>
+    <text class="model-glyph" x="283" y="139" fill="#2563eb">S</text>
+    <circle cx="328" cy="139" r="17" fill="#ecfdf5" stroke="#15803d" stroke-width="1.6"/>
+    <path d="M320 139l5 5 10-12" fill="none" stroke="#15803d" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path class="connector" d="M306 139H310"/>
+    <text class="tiny" x="283" y="183">Luna explains</text>
+    <text class="note" x="182" y="230">Auditable computation, concise explanation</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#ecfdf5" stroke="#99f6e4"/>
+    <text class="metric" x="182" y="271" fill="#0f766e">↓ 30–50% projected</text>
+  </g>
+
+  <!-- Card 6: Step-back planning -->
+  <g transform="translate(425 465)" filter="url(#shadow)" aria-label="Step-back planning pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#d97706"/>
+    <circle cx="34" cy="35" r="20" fill="#d97706"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">6</text>
+    <text class="card-title" x="63" y="31">STEP-BACK PLANNING</text>
+    <text class="card-subtitle" x="63" y="50">Resolve the frame before expensive execution</text>
+
+    <circle class="node" cx="32" cy="138" r="18"/>
+    <text class="glyph" x="32" y="138">U</text>
+    <path class="connector" d="M51 138H82"/>
+    <circle class="model-small" cx="104" cy="138" r="21"/>
+    <text class="model-glyph" x="104" y="138" fill="#2563eb">S</text>
+    <path class="connector" d="M126 138H159"/>
+    <rect class="data" x="162" y="99" width="66" height="78" rx="7"/>
+    <text x="195" y="119" text-anchor="middle" fill="#334155" font-size="11" font-weight="800">PLAN</text>
+    <text x="176" y="139" fill="#64748b" font-size="10" font-weight="700">1. frame</text>
+    <text x="176" y="154" fill="#64748b" font-size="10" font-weight="700">2. sequence</text>
+    <text x="176" y="169" fill="#64748b" font-size="10" font-weight="700">3. validate</text>
+    <path class="connector" d="M230 138H277"/>
+    <circle class="model-large" cx="299" cy="138" r="22"/>
+    <text class="model-glyph" x="299" y="138" fill="#15803d">L</text>
+    <text class="tiny" x="104" y="184">Luna plans</text>
+    <text class="tiny" x="299" y="184">Sol executes</text>
+    <text class="note" x="182" y="230">Planning pays when it prevents retries and rework</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#fffbeb" stroke="#fde68a"/>
+    <text class="metric" x="182" y="271" fill="#b45309">↓ 20–40% projected</text>
+  </g>
+
+  <!-- Card 7: Caching -->
+  <g transform="translate(808 465)" filter="url(#shadow)" aria-label="Caching pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#7c3aed"/>
+    <circle cx="34" cy="35" r="20" fill="#7c3aed"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">7</text>
+    <text class="card-title" x="63" y="31">CACHING</text>
+    <text class="card-subtitle" x="63" y="50">A repeated answer can make zero model calls</text>
+
+    <circle class="node" cx="35" cy="139" r="19"/>
+    <text class="glyph" x="35" y="139">U</text>
+    <path class="connector" d="M55 139H97"/>
+    <g transform="translate(100 105)">
+      <ellipse cx="35" cy="8" rx="31" ry="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.7"/>
+      <path d="M4 8v48c0 5 14 8 31 8s31-3 31-8V8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.7"/>
+      <path d="M4 32c0 5 14 8 31 8s31-3 31-8" fill="none" stroke="#7c3aed" stroke-width="1.3"/>
+      <text x="35" y="27" text-anchor="middle" fill="#6d28d9" font-size="10" font-weight="800">CACHE</text>
+    </g>
+    <path class="connector" d="M167 122C209 122 207 98 241 98"/>
+    <circle cx="263" cy="98" r="20" fill="#ecfdf5" stroke="#15803d" stroke-width="1.8"/>
+    <path d="M254 98l6 6 12-15" fill="none" stroke="#15803d" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="308" y="102" fill="#15803d" font-size="11" font-weight="800">HIT · 0 calls</text>
+    <path class="connector-dashed" d="M167 156C207 156 208 181 241 181"/>
+    <circle class="model-medium" cx="263" cy="181" r="20"/>
+    <text class="model-glyph" x="263" y="181" fill="#d97706">M</text>
+    <path class="connector-dashed" d="M243 191C204 212 153 209 138 171"/>
+    <text x="311" y="185" fill="#b45309" font-size="11" font-weight="800">MISS · Terra</text>
+    <text class="note" x="182" y="230">Exact hit avoids generation; miss fills the cache</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#f5f3ff" stroke="#ddd6fe"/>
+    <text class="metric" x="182" y="271" fill="#6d28d9">↓ 50–90% typical hit path</text>
+  </g>
+
+  <!-- Card 8: Batching -->
+  <g transform="translate(1191 465)" filter="url(#shadow)" aria-label="Batching pattern">
+    <rect class="card" width="365" height="300" rx="17"/>
+    <rect width="6" height="300" rx="3" fill="#2563eb"/>
+    <circle cx="34" cy="35" r="20" fill="#2563eb"/>
+    <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">8</text>
+    <text class="card-title" x="63" y="31">BATCHING</text>
+    <text class="card-subtitle" x="63" y="50">Parallel mapper for independent work</text>
+
+    <g>
+      <circle class="node" cx="32" cy="105" r="14"/>
+      <circle class="node" cx="32" cy="139" r="14"/>
+      <circle class="node" cx="32" cy="173" r="14"/>
+      <text class="glyph" x="32" y="105" font-size="10">1</text>
+      <text class="glyph" x="32" y="139" font-size="10">2</text>
+      <text class="glyph" x="32" y="173" font-size="10">3</text>
+      <path class="connector" d="M47 105C80 105 78 139 105 139"/>
+      <path class="connector" d="M47 139H105"/>
+      <path class="connector" d="M47 173C80 173 78 139 105 139"/>
+      <rect x="108" y="113" width="55" height="52" rx="13" fill="#eff6ff" stroke="#2563eb" stroke-width="1.8"/>
+      <path d="M123 128h25M123 136h25M123 144h25M123 152h25" stroke="#2563eb" stroke-width="2" stroke-linecap="round"/>
+      <path class="connector" d="M163 139C192 139 190 104 213 104"/>
+      <path class="connector" d="M163 139H213"/>
+      <path class="connector" d="M163 139C192 139 190 174 213 174"/>
+      <circle class="model-medium" cx="233" cy="104" r="18"/>
+      <circle class="model-medium" cx="233" cy="139" r="18"/>
+      <circle class="model-medium" cx="233" cy="174" r="18"/>
+      <text class="model-glyph" x="233" y="104" fill="#d97706" font-size="10">M</text>
+      <text class="model-glyph" x="233" y="139" fill="#d97706" font-size="10">M</text>
+      <text class="model-glyph" x="233" y="174" fill="#d97706" font-size="10">M</text>
+      <path class="connector" d="M252 104C280 104 278 139 302 139"/>
+      <path class="connector" d="M252 139H302"/>
+      <path class="connector" d="M252 174C280 174 278 139 302 139"/>
+      <circle cx="323" cy="139" r="20" fill="#ecfdf5" stroke="#15803d" stroke-width="1.8"/>
+      <path d="M314 139l6 6 12-15" fill="none" stroke="#15803d" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="tiny" x="136" y="190">parallel mapper</text>
+      <text class="tiny" x="233" y="207">Terra workers</text>
+    </g>
+    <text class="note" x="182" y="230">Lower wall time, same content-token work</text>
+    <rect x="24" y="251" width="317" height="30" rx="15" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text class="metric" x="182" y="270" fill="#2563eb">THROUGHPUT FIRST</text>
+    <text class="metric-label" x="182" y="282">0% automatic token saving</text>
+  </g>
+
+  <g transform="translate(42 790)" filter="url(#softShadow)" aria-label="Legend and measurement note">
+    <rect width="1514" height="75" rx="17" fill="url(#footerFill)" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="28" y="26" fill="#fd8ea1" font-size="11" font-weight="800" letter-spacing="1.5">MODEL TIERS</text>
+    <circle class="model-small" cx="46" cy="50" r="13"/>
+    <text class="model-glyph" x="46" y="50" fill="#2563eb" font-size="9">S</text>
+    <text x="66" y="54" fill="#d6deea" font-size="11" font-weight="700">gpt-5.6-luna · small</text>
+    <circle class="model-medium" cx="209" cy="50" r="13"/>
+    <text class="model-glyph" x="209" y="50" fill="#d97706" font-size="9">M</text>
+    <text x="229" y="54" fill="#d6deea" font-size="11" font-weight="700">gpt-5.6-terra · medium</text>
+    <circle class="model-large" cx="389" cy="50" r="13"/>
+    <text class="model-glyph" x="389" y="50" fill="#15803d" font-size="9">L</text>
+    <text x="409" y="54" fill="#d6deea" font-size="11" font-weight="700">gpt-5.6-sol · large</text>
+
+    <line x1="555" y1="15" x2="555" y2="60" stroke="#ffffff" stroke-opacity="0.15"/>
+    <text x="583" y="27" fill="#ffffff" font-size="12" font-weight="800">MEASUREMENT NOTE</text>
+    <text x="583" y="48" fill="#afbdd0" font-size="11" font-weight="600">Percentages are modeled projections, not guarantees. Live mode reads provider usage; demo mode estimates ≈4 characters/token.</text>
+    <text x="583" y="64" fill="#afbdd0" font-size="11" font-weight="600">Validate every optimization with task quality, latency, routing accuracy, retrieval recall, cache freshness, and production telemetry.</text>
+  </g>
+</svg>

@@ -6,6 +6,10 @@ TokenFlow Lab turns eight token-efficiency patterns into runnable workflows, ani
 
 > The application runs offline by default. Demo mode uses the real LangChain4j Agentic orchestration runtime with deterministic local model responses. Live mode uses Azure OpenAI GPT-5.6 through managed identity.
 
+![TokenFlow Lab overview of eight agent design patterns for deliberate token spend](docs/images/tokenflow-patterns-overview.svg)
+
+The overview deliberately labels savings as projections and treats batching as a throughput pattern with **0% automatic token saving**, matching the implemented demo.
+
 ## Contents
 
 - [Why this lab exists](#why-this-lab-exists)
