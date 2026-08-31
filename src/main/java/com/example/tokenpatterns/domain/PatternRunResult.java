@@ -7,7 +7,6 @@ import java.util.Map;
 public record PatternRunResult(
         String runId,
         String patternId,
-        String mode,
         String output,
         Metrics metrics,
         List<TraceEvent> trace,

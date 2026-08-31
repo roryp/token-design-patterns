@@ -20,8 +20,8 @@
     <properties>
         <java.version>21</java.version>
         <maven.compiler.parameters>true</maven.compiler.parameters>
-        <langchain4j.version>1.17.2</langchain4j.version>
-        <langchain4j.agentic.version>1.17.2-beta27</langchain4j.agentic.version>
+        <langchain4j.version>1.19.0</langchain4j.version>
+        <langchain4j.agentic.version>1.19.0-beta29</langchain4j.agentic.version>
     </properties>
 
     <dependencies>

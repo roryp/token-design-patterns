@@ -1,4 +1,4 @@
-package com.example.tokenpatterns.agent;
+package com.example.tokenpatterns;
 
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -14,28 +14,21 @@ import dev.langchain4j.model.output.TokenUsage;
 import java.util.Locale;
 import java.util.stream.Collectors;
 
-/**
- * A deterministic model that keeps the workshop runnable without credentials.
- * The surrounding orchestration is the real LangChain4j Agentic runtime; only
- * the model responses are locally generated.
- */
-public final class DemoChatModel implements ChatModel {
+/** Deterministic stand-in so tests exercise the real orchestration without model credentials. */
+public final class StubChatModel implements ChatModel {
 
     private final String modelName;
-    private final long latencyMs;
 
-    public DemoChatModel(String modelName, long latencyMs) {
+    public StubChatModel(String modelName) {
         this.modelName = modelName;
-        this.latencyMs = latencyMs;
     }
 
     @Override
     public ChatResponse doChat(ChatRequest request) {
         String prompt = request.messages().stream()
-                .map(DemoChatModel::textOf)
+                .map(StubChatModel::textOf)
                 .collect(Collectors.joining("\n"));
 
-        pause();
         String response = respond(prompt);
         int inputTokens = estimateTokens(prompt);
         int outputTokens = estimateTokens(response);
@@ -175,14 +168,5 @@ public final class DemoChatModel implements ChatModel {
 
     private static int estimateTokens(String text) {
         return Math.max(1, (int) Math.ceil(text.codePointCount(0, text.length()) / 4.0));
-    }
-
-    private void pause() {
-        try {
-            Thread.sleep(latencyMs);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Demo model invocation was interrupted", exception);
-        }
     }
 }

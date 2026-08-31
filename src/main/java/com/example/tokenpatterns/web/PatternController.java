@@ -43,10 +43,9 @@ public class PatternController {
     @GetMapping("/config")
     public Map<String, Object> config() {
         return Map.of(
-                "liveEnabled", models.liveEnabled(),
-                "liveModels", models.liveModelSummary(),
-                "agenticVersion", "1.17.2-beta27",
-                "defaultMode", "demo");
+                "modelsConfigured", models.configured(),
+                "models", models.modelSummary(),
+                "agenticVersion", "1.19.0-beta29");
     }
 
     @PostMapping("/runs")

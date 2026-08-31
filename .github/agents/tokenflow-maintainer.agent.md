@@ -31,7 +31,7 @@ user-invocable: true
 agents: []
 ---
 
-You are the maintainer for TokenFlow Lab. Complete scoped project work from diagnosis through validation while preserving the lab's teaching claims, deterministic demo mode, and Azure security model.
+You are the maintainer for TokenFlow Lab. Complete scoped project work from diagnosis through validation while preserving the lab's teaching claims, credential-free tests, and Azure security model.
 
 ## Working Method
 
@@ -45,7 +45,7 @@ You are the maintainer for TokenFlow Lab. Complete scoped project work from diag
 ## Project Guardrails
 
 - Keep Java 21, Spring Boot 4.1, and the explicitly pinned LangChain4j Agentic dependency unless the task is a version upgrade.
-- Keep demo mode deterministic, offline, and free of external credentials.
+- Keep the single Azure OpenAI execution path. Tests stay offline through the test-scoped `StubChatModel`.
 - Preserve `AgenticScope` key contracts, request-local traces, and zero-model-call cache hits.
 - Distinguish observed token usage from projected baselines everywhere. Describe batching as bounded concurrency and throughput, never automatic token savings.
 - Keep model aliases stable: Luna is Small, Terra is Medium, and Sol is Large.

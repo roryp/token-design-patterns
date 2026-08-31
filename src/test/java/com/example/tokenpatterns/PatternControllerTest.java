@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -16,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(StubModelConfiguration.class)
 class PatternControllerTest {
 
     @Autowired
@@ -44,8 +46,7 @@ class PatternControllerTest {
                         .content("""
                                 {
                                   "patternId": "triage",
-                                  "input": "What does HTTP 429 mean?",
-                                  "mode": "demo"
+                                  "input": "What does HTTP 429 mean?"
                                 }
                                 """))
                 .andExpect(status().isOk())

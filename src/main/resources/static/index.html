@@ -117,7 +117,7 @@
       top: 0;
       z-index: 20;
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) auto auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 24px;
       align-items: center;
       min-height: 76px;
@@ -151,36 +151,11 @@
       min-width: 0;
     }
 
-    .brand-copy strong {
-      display: block;
-      font-size: 0.98rem;
-      letter-spacing: 0.01em;
-    }
-
-    .brand-copy span {
-      display: block;
-      overflow: hidden;
-      color: var(--cp-text-muted);
-      font-size: 0.75rem;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .header-title {
-      text-align: center;
-    }
-
-    .header-title h1 {
+    .brand-copy h1 {
       margin: 0;
-      font-size: clamp(1rem, 2vw, 1.35rem);
+      font-size: 0.98rem;
       font-weight: 750;
-      letter-spacing: -0.025em;
-    }
-
-    .header-title p {
-      margin: 2px 0 0;
-      color: var(--cp-text-muted);
-      font-size: 0.76rem;
+      letter-spacing: 0.01em;
     }
 
     .header-actions {
@@ -617,37 +592,6 @@
       padding: 14px;
     }
 
-    .mode-control {
-      display: inline-flex;
-      padding: 3px;
-      border: 1px solid var(--cp-border);
-      border-radius: 0.625rem;
-      background: var(--cp-surface-soft);
-    }
-
-    .mode-button {
-      min-width: 58px;
-      padding: 5px 9px;
-      border: 0;
-      border-radius: 7px;
-      background: none;
-      color: var(--cp-text-muted);
-      font-size: 0.68rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .mode-button.active {
-      background: var(--cp-surface);
-      color: var(--cp-accent);
-      box-shadow: 0 1px 2px var(--cp-border);
-    }
-
-    .mode-button:disabled {
-      cursor: not-allowed;
-      opacity: 0.45;
-    }
-
     .input-label {
       display: flex;
       align-items: center;
@@ -782,11 +726,74 @@
     .answer-output {
       margin: 0;
       color: var(--cp-text);
-      font-family: Consolas, "Courier New", Courier, monospace;
-      font-size: 0.76rem;
-      line-height: 1.65;
-      white-space: pre-wrap;
+      font-size: 0.79rem;
+      line-height: 1.62;
       word-break: break-word;
+    }
+
+    .answer-output > * {
+      margin: 0 0 9px;
+    }
+
+    .answer-output > *:last-child {
+      margin-bottom: 0;
+    }
+
+    .answer-output h4,
+    .answer-output h5,
+    .answer-output h6 {
+      margin-top: 13px;
+      font-size: 0.79rem;
+      font-weight: 750;
+      letter-spacing: -0.01em;
+    }
+
+    .answer-output ul,
+    .answer-output ol {
+      padding-left: 19px;
+    }
+
+    .answer-output li {
+      margin: 3px 0;
+    }
+
+    .answer-output a {
+      color: var(--cp-accent);
+    }
+
+    .answer-output code {
+      padding: 1px 5px;
+      border-radius: 5px;
+      background: var(--cp-surface-soft);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.72rem;
+    }
+
+    .answer-output pre {
+      overflow-x: auto;
+      margin: 0 0 9px;
+      padding: 10px 12px;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface-soft);
+    }
+
+    .answer-output pre code {
+      padding: 0;
+      background: none;
+      line-height: 1.55;
+    }
+
+    .answer-output blockquote {
+      margin-left: 0;
+      padding-left: 10px;
+      border-left: 2px solid var(--cp-border-strong);
+      color: var(--cp-text-muted);
+    }
+
+    .answer-output hr {
+      border: 0;
+      border-top: 1px solid var(--cp-border);
     }
 
     .answer-meta {
@@ -1154,12 +1161,7 @@
 
     @media (max-width: 1050px) {
       .app-header {
-        grid-template-columns: minmax(0, 1fr) auto;
         padding: 12px 16px;
-      }
-
-      .header-title {
-        display: none;
       }
 
       .workspace {
@@ -1276,13 +1278,8 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">Tƒ</div>
       <div class="brand-copy">
-        <strong>TokenFlow Lab</strong>
-        <span>LangChain4j Agentic pattern simulator</span>
+        <h1>TokenFlow Lab</h1>
       </div>
-    </div>
-    <div class="header-title">
-      <h1>Cost-conscious agent design patterns</h1>
-      <p>Run the flow. Inspect the scope. Challenge the estimate.</p>
     </div>
     <div class="header-actions">
       <span class="status-pill"><i class="status-dot"></i><span id="runtimeStatus">Loading runtime</span></span>
@@ -1293,12 +1290,12 @@
   <main class="workspace">
     <aside class="pattern-rail panel" aria-label="Token design patterns">
       <div class="rail-heading">
-        <p class="eyebrow">Pattern library</p>
-        <span>8 flows</span>
+        <p class="eyebrow">Patterns</p>
+        <span>8</span>
       </div>
       <nav class="pattern-list" id="patternList"></nav>
       <div class="rail-footer">
-        Percentages are projections, not guarantees. Batching is intentionally measured by throughput first.
+        Savings are projections, not guarantees.
       </div>
     </aside>
 
@@ -1318,13 +1315,12 @@
       <section class="flow-card panel" aria-labelledby="flowHeading">
         <div class="card-header">
           <div>
-            <h3 id="flowHeading">Agentic execution graph</h3>
-            <p>Nodes illuminate from AgentListener events and deterministic agent spans.</p>
+            <h3 id="flowHeading">Execution graph</h3>
           </div>
           <div class="legend" aria-label="Graph legend">
             <span><i class="legend-model"></i>Model</span>
             <span><i class="legend-non-ai"></i>Non-AI agent</span>
-            <span><i></i>State / orchestration</span>
+            <span><i></i>State</span>
           </div>
         </div>
         <div class="flow-viewport" id="flowViewport">
@@ -1337,14 +1333,13 @@
           <div class="savings-gauge" id="savingsGauge"><strong id="savingsValue">—</strong></div>
           <div class="metric-copy">
             <span class="metric-label">Projected saving</span>
-            <span class="metric-foot" id="savingsFoot">Run a flow to compare</span>
+            <span class="metric-foot" id="savingsFoot">not run yet</span>
           </div>
         </article>
         <article class="metric-card card">
           <div class="metric-copy">
             <span class="metric-label">Modeled baseline</span>
             <strong class="metric-value" id="baselineValue">—</strong>
-            <span class="metric-foot">token-equivalent</span>
           </div>
         </article>
         <article class="metric-card card">
@@ -1365,7 +1360,6 @@
           <div class="metric-copy">
             <span class="metric-label">Agentic steps</span>
             <strong class="metric-value" id="stepsValue">—</strong>
-            <span class="metric-foot">including workflows</span>
           </div>
         </article>
       </div>
@@ -1376,38 +1370,33 @@
         <section class="runner-card panel" aria-labelledby="runnerHeading">
           <div class="card-header">
             <div>
-              <h3 id="runnerHeading">Run the pattern</h3>
-              <p id="modeDescription">Offline deterministic model · no key required</p>
-            </div>
-            <div class="mode-control" aria-label="Execution mode">
-              <button class="mode-button active" id="demoMode" type="button">Demo</button>
-              <button class="mode-button" id="liveMode" type="button">Live</button>
+              <h3 id="runnerHeading">Run</h3>
+              <p id="modelSummary">—</p>
             </div>
           </div>
           <div class="runner-body">
-            <label class="input-label" for="promptInput"><span>Developer request</span><span id="charCount">0 / 12,000</span></label>
+            <label class="input-label" for="promptInput"><span>Request</span><span id="charCount">0 / 12,000</span></label>
             <textarea id="promptInput" maxlength="12000" spellcheck="true"></textarea>
             <div class="runner-actions">
               <button class="primary-button" id="runButton" type="button">Run pattern</button>
               <button class="secondary-button cache-reset" id="clearCacheButton" type="button">Clear cache</button>
             </div>
-            <div class="run-note" id="runNote">The graph uses real LangChain4j Agentic builders. Demo mode replaces only the external model call.</div>
+            <div class="run-note" id="runNote">Each run executes the real LangChain4j Agentic workflow.</div>
           </div>
         </section>
 
         <section class="answer-card panel" aria-labelledby="answerHeading">
           <div class="card-header">
             <div>
-              <h3 id="answerHeading">Agent output</h3>
-              <p id="answerSubtitle">Waiting for a run</p>
+              <h3 id="answerHeading">Output</h3>
+              <p id="answerSubtitle">Not run</p>
             </div>
-            <span class="mini-badge" id="runModeBadge">DEMO</span>
           </div>
           <div class="answer-body" id="answerBody">
             <div class="answer-empty">
               <div>
                 <div class="empty-orbit">→</div>
-                Select a pattern, edit its sample request, and run the flow.
+                Run a pattern to see output.
               </div>
             </div>
           </div>
@@ -1417,13 +1406,12 @@
       <section class="trace-card panel" aria-labelledby="traceHeading">
         <div class="card-header">
           <div>
-            <h3 id="traceHeading">Execution trace</h3>
-            <p>Model calls include provider token usage; non-AI agents remain visible at zero tokens.</p>
+            <h3 id="traceHeading">Trace</h3>
           </div>
-          <div class="trace-summary" id="traceSummary">No execution yet</div>
+          <div class="trace-summary" id="traceSummary">—</div>
         </div>
         <div class="trace-list" id="traceList">
-          <div class="trace-placeholder">Agent invocations will appear here in start order.</div>
+          <div class="trace-placeholder">No invocations yet.</div>
         </div>
       </section>
     </section>
@@ -1436,20 +1424,20 @@
       <div class="teaching-body">
         <section class="teaching-section">
           <h4><span class="section-index">01</span>How it works</h4>
-          <p id="mechanismText">Loading…</p>
+          <p id="mechanismText">—</p>
         </section>
         <section class="teaching-section">
           <h4><span class="section-index">02</span>Best fit</h4>
-          <p id="bestForText">Loading…</p>
+          <p id="bestForText">—</p>
         </section>
         <section class="teaching-section watchout">
           <h4><span class="section-index">!</span>Watch out</h4>
-          <p id="watchOutText">Loading…</p>
+          <p id="watchOutText">—</p>
         </section>
         <section class="teaching-section" id="takeawaySection">
           <h4><span class="section-index">03</span>What this run proved</h4>
           <ul class="takeaway-list" id="takeawayList">
-            <li>Run the selected pattern to populate evidence.</li>
+            <li>Run to populate evidence.</li>
           </ul>
         </section>
         <section class="teaching-section scope-section" id="scopeSection">
@@ -1457,7 +1445,7 @@
           <div class="scope-list" id="scopeList"></div>
         </section>
         <section class="teaching-section">
-          <p>Built with <a href="https://docs.langchain4j.dev/tutorials/agents/" target="_blank" rel="noreferrer">LangChain4j Agentic AI</a>. The module is experimental; pin and test its version.</p>
+          <p>Built with <a href="https://docs.langchain4j.dev/tutorials/agents/" target="_blank" rel="noreferrer">LangChain4j Agentic AI</a> · experimental module.</p>
         </section>
       </div>
     </aside>
@@ -1468,7 +1456,6 @@
       patterns: [],
       current: null,
       config: null,
-      mode: "demo",
       animationToken: 0,
       graph: null
     };
@@ -1488,10 +1475,7 @@
       charCount: $("#charCount"),
       runButton: $("#runButton"),
       clearCacheButton: $("#clearCacheButton"),
-      demoMode: $("#demoMode"),
-      liveMode: $("#liveMode"),
-      modeDescription: $("#modeDescription"),
-      runModeBadge: $("#runModeBadge"),
+      modelSummary: $("#modelSummary"),
       runNote: $("#runNote"),
       answerBody: $("#answerBody"),
       answerSubtitle: $("#answerSubtitle"),
@@ -1540,12 +1524,13 @@
         state.patterns = await patternsResponse.json();
         state.config = await configResponse.json();
         elements.runtimeStatus.textContent = `Agentic ${state.config.agenticVersion}`;
-        elements.liveMode.disabled = !state.config.liveEnabled;
-        elements.liveMode.title = state.config.liveEnabled
-          ? `Use ${state.config.liveModels}`
-          : "Set OPENAI_API_KEY before startup to enable live mode";
+        elements.modelSummary.textContent = state.config.models;
         renderPatternList();
         selectPattern(state.patterns[0]?.id);
+        if (!state.config.modelsConfigured) {
+          elements.runButton.disabled = true;
+          showError("Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT plus managed identity or OPENAI_API_KEY.");
+        }
       } catch (error) {
         showError(error.message);
         elements.runtimeStatus.textContent = "Runtime unavailable";
@@ -1590,10 +1575,10 @@
       elements.runButton.textContent = `Run ${pattern.name}`;
       elements.clearCacheButton.classList.toggle("visible", pattern.id === "caching");
       elements.runNote.textContent = pattern.id === "caching"
-        ? "Run this exact prompt twice: the second execution should take the hit path with zero model calls."
+        ? "Run the same prompt twice: the second run should hit the cache."
         : pattern.id === "batching"
-          ? "Separate up to six independent items with semicolons. Parallelism improves wall time, not content tokens by itself."
-          : "The graph uses real LangChain4j Agentic builders. Demo mode replaces only the external model call.";
+          ? "Semicolon-separate up to six independent items."
+          : "Each run executes the real LangChain4j Agentic workflow.";
       elements.teachingTitle.textContent = pattern.name;
       elements.mechanismText.textContent = pattern.mechanism;
       elements.bestForText.textContent = pattern.bestFor;
@@ -1718,11 +1703,11 @@
     function resetRunPanels() {
       hideError();
       resetMetrics();
-      elements.answerSubtitle.textContent = "Waiting for a run";
+      elements.answerSubtitle.textContent = "Not run";
       elements.answerBody.replaceChildren(emptyAnswer());
-      elements.traceSummary.textContent = "No execution yet";
-      elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "Agent invocations will appear here in start order."));
-      elements.takeawayList.replaceChildren(createElement("li", "", "Run the selected pattern to populate evidence."));
+      elements.traceSummary.textContent = "—";
+      elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "No invocations yet."));
+      elements.takeawayList.replaceChildren(createElement("li", "", "Run to populate evidence."));
       elements.scopeSection.classList.remove("visible");
       elements.scopeList.replaceChildren();
     }
@@ -1731,7 +1716,7 @@
       const wrapper = createElement("div", "answer-empty");
       const inner = createElement("div");
       inner.append(createElement("div", "empty-orbit", "→"));
-      inner.append(document.createTextNode("Select a pattern, edit its sample request, and run the flow."));
+      inner.append(document.createTextNode("Run a pattern to see output."));
       wrapper.append(inner);
       return wrapper;
     }
@@ -1739,7 +1724,7 @@
     function resetMetrics() {
       elements.savingsGauge.style.setProperty("--progress", "0deg");
       elements.savingsValue.textContent = "—";
-      elements.savingsFoot.textContent = "Run a flow to compare";
+      elements.savingsFoot.textContent = "not run yet";
       elements.baselineValue.textContent = "—";
       elements.observedValue.textContent = "—";
       elements.durationValue.textContent = "—";
@@ -1748,32 +1733,21 @@
       elements.concurrencyFoot.textContent = "end to end";
     }
 
-    function setMode(mode) {
-      if (mode === "live" && !state.config?.liveEnabled) return;
-      state.mode = mode;
-      elements.demoMode.classList.toggle("active", mode === "demo");
-      elements.liveMode.classList.toggle("active", mode === "live");
-      elements.runModeBadge.textContent = mode.toUpperCase();
-      elements.modeDescription.textContent = mode === "demo"
-        ? "Offline deterministic model · no key required"
-        : state.config.liveModels;
-    }
-
     async function runCurrentPattern() {
-      if (!state.current || !elements.promptInput.value.trim()) return;
+      if (!state.current || !state.config?.modelsConfigured || !elements.promptInput.value.trim()) return;
       hideError();
       state.animationToken += 1;
       const runToken = state.animationToken;
       setRunning(true);
       resetGraphState();
-      elements.answerSubtitle.textContent = "Agentic workflow executing";
+      elements.answerSubtitle.textContent = "Running…";
       const loading = createElement("div", "answer-loading");
       const loadingInner = createElement("div");
       loadingInner.append(createElement("div", "spinner"));
-      loadingInner.append(document.createTextNode("Building AgenticScope and invoking the selected path…"));
+      loadingInner.append(document.createTextNode("Running…"));
       loading.append(loadingInner);
       elements.answerBody.replaceChildren(loading);
-      elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "Collecting inherited AgentListener events…"));
+      elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "Collecting trace…"));
 
       try {
         const response = await fetch("/api/runs", {
@@ -1781,8 +1755,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patternId: state.current.id,
-            input: elements.promptInput.value.trim(),
-            mode: state.mode
+            input: elements.promptInput.value.trim()
           })
         });
         const payload = await response.json();
@@ -1803,16 +1776,155 @@
 
     function setRunning(running) {
       elements.runButton.disabled = running;
-      elements.runButton.textContent = running ? "Running agentic flow…" : `Run ${state.current?.name || "pattern"}`;
+      elements.runButton.textContent = running ? "Running…" : `Run ${state.current?.name || "pattern"}`;
       elements.promptInput.disabled = running;
-      elements.demoMode.disabled = running;
-      elements.liveMode.disabled = running || !state.config?.liveEnabled;
+    }
+
+    const blockStart = /^(```|#{1,6}\s|[-*•]\s|\d+[.)]\s|>\s?|(---|\*\*\*)\s*$)/;
+
+    // Model output may contain markdown; nodes are built with the DOM API so nothing is ever parsed as HTML.
+    function renderMarkdown(text) {
+      const fragment = document.createDocumentFragment();
+      const lines = String(text ?? "").replace(/\r\n?/g, "\n").split("\n");
+      let index = 0;
+
+      while (index < lines.length) {
+        const line = lines[index];
+        if (!line.trim()) {
+          index += 1;
+          continue;
+        }
+
+        if (/^```/.test(line)) {
+          const buffer = [];
+          index += 1;
+          while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+            buffer.push(lines[index]);
+            index += 1;
+          }
+          index += 1;
+          const pre = document.createElement("pre");
+          pre.append(createElement("code", "", buffer.join("\n")));
+          fragment.append(pre);
+          continue;
+        }
+
+        if (/^(---|\*\*\*)\s*$/.test(line)) {
+          fragment.append(document.createElement("hr"));
+          index += 1;
+          continue;
+        }
+
+        const heading = line.match(/^(#{1,6})\s+(.*)$/);
+        if (heading) {
+          const element = document.createElement(`h${Math.min(6, 3 + heading[1].length)}`);
+          element.append(renderInline(heading[2]));
+          fragment.append(element);
+          index += 1;
+          continue;
+        }
+
+        const ordered = /^\d+[.)]\s+/.test(line);
+        if (ordered || /^[-*•]\s+/.test(line)) {
+          const marker = ordered ? /^\d+[.)]\s+/ : /^[-*•]\s+/;
+          const list = document.createElement(ordered ? "ol" : "ul");
+          while (index < lines.length && marker.test(lines[index])) {
+            const item = document.createElement("li");
+            item.append(renderInline(lines[index].replace(marker, "")));
+            list.append(item);
+            index += 1;
+          }
+          fragment.append(list);
+          continue;
+        }
+
+        if (/^>\s?/.test(line)) {
+          const buffer = [];
+          while (index < lines.length && /^>\s?/.test(lines[index])) {
+            buffer.push(lines[index].replace(/^>\s?/, ""));
+            index += 1;
+          }
+          const quote = document.createElement("blockquote");
+          quote.append(renderInline(buffer.join("\n")));
+          fragment.append(quote);
+          continue;
+        }
+
+        const buffer = [];
+        while (index < lines.length && lines[index].trim() && !blockStart.test(lines[index])) {
+          buffer.push(lines[index]);
+          index += 1;
+        }
+        const paragraph = document.createElement("p");
+        paragraph.append(renderInline(buffer.join("\n")));
+        fragment.append(paragraph);
+      }
+
+      return fragment;
+    }
+
+    function renderInline(text) {
+      const fragment = document.createDocumentFragment();
+      const pattern = /`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\n]+)\*|_([^_\n]+)_|\[([^\]]+)\]\(([^)\s]+)\)/g;
+      let cursor = 0;
+      let match;
+
+      while ((match = pattern.exec(text)) !== null) {
+        appendText(fragment, text.slice(cursor, match.index));
+        if (match[1] !== undefined) fragment.append(createElement("code", "", match[1]));
+        else if (match[2] !== undefined) fragment.append(createElement("strong", "", match[2]));
+        else if (match[3] !== undefined) fragment.append(createElement("strong", "", match[3]));
+        else if (match[4] !== undefined) fragment.append(createElement("em", "", match[4]));
+        else if (match[5] !== undefined) fragment.append(createElement("em", "", match[5]));
+        else fragment.append(safeLink(match[6], match[7]));
+        cursor = match.index + match[0].length;
+      }
+
+      appendText(fragment, text.slice(cursor));
+      return fragment;
+    }
+
+    function appendText(target, text) {
+      if (!text) return;
+      text.split("\n").forEach((part, position) => {
+        if (position) target.append(document.createElement("br"));
+        if (part) target.append(document.createTextNode(part));
+      });
+    }
+
+    function safeLink(label, href) {
+      if (!/^(https?:|mailto:)/i.test(href)) return document.createTextNode(`${label} (${href})`);
+      const anchor = createElement("a", "", label);
+      anchor.href = href;
+      anchor.target = "_blank";
+      anchor.rel = "noreferrer noopener";
+      return anchor;
+    }
+
+    // Compact one-line surfaces show markdown syntax as noise, so strip it instead of rendering it.
+    function plainText(value) {
+      const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
+      return String(text)
+        .replace(/```[\s\S]*?```/g, " ")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+        .replace(/^\s{0,3}>\s?/gm, "")
+        .replace(/^\s{0,3}(?:[-*•]|\d+[.)])\s+/gm, "")
+        .replace(/^\s{0,3}(?:---|\*\*\*)\s*$/gm, " ")
+        .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, "$1$2")
+        .replace(/\*([^*\n]+)\*|_([^_\n]+)_/g, "$1$2")
+        .replace(/\s+/g, " ")
+        .replace(/(^|[\s=:;,([])#{1,6}\s+/g, "$1")
+        .replace(/(^|[\s=:;,([])>\s+/g, "$1")
+        .replace(/(^|[=([]|[.:;)\]]\s)\s*(?:[-*•]|\d{1,2}[.)])\s+(?=[A-Za-z(])/g, "$1")
+        .trim();
     }
 
     function renderRun(result) {
-      const output = createElement("pre", "answer-output", result.output);
+      const output = createElement("div", "answer-output");
+      output.append(renderMarkdown(result.output));
       const meta = createElement("div", "answer-meta");
-      meta.append(createElement("span", "mini-badge", result.mode.toUpperCase()));
       meta.append(createElement("span", "mini-badge", `${result.metrics.modelCalls} model call${result.metrics.modelCalls === 1 ? "" : "s"}`));
       if (result.metrics.cacheHit) meta.append(createElement("span", "mini-badge", "CACHE HIT"));
       const wrapper = document.createDocumentFragment();
@@ -1830,7 +1942,7 @@
       const percent = Math.max(0, Math.min(100, metrics.projectedSavingsPercent));
       elements.savingsGauge.style.setProperty("--progress", `${percent * 3.6}deg`);
       elements.savingsValue.textContent = `${percent}%`;
-      elements.savingsFoot.textContent = metrics.cacheHit ? "cache hit avoided generation" : `${formatNumber(metrics.avoidedTokens)} tokens projected`;
+      elements.savingsFoot.textContent = metrics.cacheHit ? "cache hit" : `${formatNumber(metrics.avoidedTokens)} tokens avoided`;
       elements.baselineValue.textContent = formatNumber(metrics.projectedBaselineTokens);
       elements.observedValue.textContent = formatNumber(metrics.observedTokens);
       elements.durationValue.textContent = `${formatNumber(metrics.durationMs)}ms`;
@@ -1842,7 +1954,7 @@
 
     function renderTrace(trace) {
       elements.traceList.replaceChildren();
-      elements.traceSummary.textContent = `${trace.length} invocations · start order`;
+      elements.traceSummary.textContent = `${trace.length} steps`;
       trace.forEach((event) => {
         const item = createElement("div", "trace-item");
         item.dataset.sequence = event.sequence;
@@ -1853,7 +1965,7 @@
         agent.append(createElement("small", "", event.model || event.kind));
         item.append(agent);
 
-        item.append(createElement("span", "trace-preview", event.outputPreview || event.inputPreview || "No payload"));
+        item.append(createElement("span", "trace-preview", plainText(event.outputPreview || event.inputPreview) || "No payload"));
         item.append(createElement("span", `trace-kind ${event.kind}`, event.kind));
         const tokenTotal = event.inputTokens + event.outputTokens;
         item.append(createElement("span", "trace-metric", tokenTotal ? `${tokenTotal} tok · ${event.durationMs}ms` : `${event.durationMs}ms`));
@@ -1960,13 +2072,13 @@
         const chip = createElement("span", "scope-chip");
         const keyElement = createElement("strong", "", key);
         chip.append(keyElement, document.createTextNode(` · ${compactValue(value)}`));
-        chip.title = typeof value === "string" ? value : JSON.stringify(value);
+        chip.title = plainText(value);
         elements.scopeList.append(chip);
       });
     }
 
     function compactValue(value) {
-      const text = typeof value === "string" ? value : JSON.stringify(value);
+      const text = plainText(value);
       return text.length <= 28 ? text : `${text.slice(0, 27)}…`;
     }
 
@@ -1974,7 +2086,7 @@
       try {
         const response = await fetch("/api/cache", { method: "DELETE" });
         if (!response.ok) throw new Error("The cache could not be cleared.");
-        elements.runNote.textContent = "Cache cleared. The next request will take the miss path and repopulate it.";
+        elements.runNote.textContent = "Cache cleared. The next run takes the miss path.";
         resetRunPanels();
         renderFlow(state.current);
       } catch (error) {
@@ -2010,8 +2122,6 @@
 
     elements.runButton.addEventListener("click", runCurrentPattern);
     elements.clearCacheButton.addEventListener("click", clearCache);
-    elements.demoMode.addEventListener("click", () => setMode("demo"));
-    elements.liveMode.addEventListener("click", () => setMode("live"));
     elements.promptInput.addEventListener("input", updateCharCount);
     elements.promptInput.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") runCurrentPattern();

@@ -4,18 +4,18 @@
 
 TokenFlow Lab turns eight token-efficiency patterns into runnable workflows, animated execution graphs, shared-state inspection, and honest token/latency measurements. It is designed for live developer sessions: every pattern has a sample prompt, visual trace, teaching notes, and a deterministic credential-free mode.
 
-> The application runs offline by default. Demo mode uses the real LangChain4j Agentic orchestration runtime with deterministic local model responses. Live mode uses Azure OpenAI GPT-5.6 through managed identity.
+> The application runs against Azure OpenAI GPT-5.6 through managed identity. Configure an endpoint and deployments before starting it.
 
 ![TokenFlow Lab overview of eight agent design patterns for deliberate token spend](docs/images/tokenflow-patterns-overview.svg)
 
-The overview deliberately labels savings as projections and treats batching as a throughput pattern with **0% automatic token saving**, matching the implemented demo.
+The overview deliberately labels savings as projections and treats batching as a throughput pattern with **0% automatic token saving**, matching the implemented workflows.
 
 ## Contents
 
 - [Why this lab exists](#why-this-lab-exists)
 - [Patterns](#patterns)
 - [Quick start](#quick-start)
-- [Execution modes](#execution-modes)
+- [Models](#models)
 - [Workshop walkthrough](#workshop-walkthrough)
 - [Application architecture](#application-architecture)
 - [Azure architecture](#azure-architecture)
@@ -69,38 +69,30 @@ Batching does **not** inherently reduce content tokens. The lab reports it as a 
 ### Prerequisites
 
 - Java 21 or later
-- No model credentials for demo mode
+- An Azure OpenAI endpoint with the three GPT-5.6 deployments
 - Maven is optional because the wrapper is included
 
 ### Windows PowerShell
 
 ```powershell
+$env:AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+$env:AZURE_OPENAI_USE_MANAGED_IDENTITY="true"
 .\mvnw.cmd spring-boot:run
 ```
 
 ### macOS or Linux
 
 ```bash
+export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+export AZURE_OPENAI_USE_MANAGED_IDENTITY="true"
 ./mvnw spring-boot:run
 ```
 
-Open [http://localhost:8080](http://localhost:8080), select a pattern, and choose **Run pattern**. Use <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>⌘</kbd>+<kbd>Enter</kbd> to run from the prompt editor.
+Open [http://localhost:8080](http://localhost:8080), select a pattern, and choose **Run pattern**. Use <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>⌘</kbd>+<kbd>Enter</kbd> to run from the prompt editor. If no endpoint is configured, the UI reports it and disables the run button.
 
-## Execution modes
+## Models
 
-### Demo mode
-
-Demo mode is deterministic, fast, and credential-free. It is ideal for presentations because:
-
-- the orchestration is real LangChain4j Agentic code;
-- only the external model response is simulated;
-- routes and outputs are repeatable;
-- token usage is estimated at approximately four characters per token;
-- all eight patterns work without network access.
-
-### Live mode
-
-Live mode uses three Azure OpenAI deployments as explicit cost/capability tiers:
+The lab uses three Azure OpenAI deployments as explicit cost/capability tiers:
 
 | Application tier | Azure deployment | Intended work |
 |---|---|---|
@@ -110,7 +102,7 @@ Live mode uses three Azure OpenAI deployments as explicit cost/capability tiers:
 
 The deployed Container App authenticates with a user-assigned managed identity. No Azure OpenAI key is stored in Bicep, Container Apps, or the browser.
 
-For local live-mode testing, grant the signed-in developer `Cognitive Services OpenAI User`, sign in with Azure CLI, and set:
+For local testing, grant the signed-in developer `Cognitive Services OpenAI User`, sign in with Azure CLI, and set:
 
 ```powershell
 az login
@@ -146,8 +138,7 @@ flowchart LR
     API --> Catalog[Pattern catalog and graph topology]
     API --> Runner[Pattern runner]
     Runner --> Agentic[LangChain4j Agentic workflows]
-    Agentic --> Demo[Deterministic demo ChatModels]
-    Agentic -. live mode .-> AzureModels[Azure OpenAI GPT-5.6]
+    Agentic --> AzureModels[Azure OpenAI GPT-5.6]
     Agentic --> Scope[AgenticScope shared state]
     Agentic --> Trace[AgentListener and deterministic spans]
     Scope --> API
@@ -361,7 +352,7 @@ Review the target subscription and environment before running this destructive c
 
 ## Metrics and claims
 
-- **Observed tokens** are read from each `ChatResponse`. Demo mode estimates usage; live mode uses Azure OpenAI response usage.
+- **Observed tokens** are read from each `ChatResponse` using Azure OpenAI response usage.
 - **Modeled baseline** is the projected cost of an equivalent monolithic large-model or repeated full-context path. It is not provider billing data.
 - **Avoided tokens** equal the modeled baseline minus observed tokens.
 - **Caching** claims no savings on the first miss and 100% model-token avoidance only on an exact hit.
@@ -376,8 +367,8 @@ For production decisions, pair token telemetry with task success, latency, routi
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/patterns` | Pattern descriptions and graph definitions |
-| `GET` | `/api/config` | Runtime capabilities and live model names; never returns secrets |
-| `POST` | `/api/runs` | Execute one pattern in `demo` or `live` mode |
+| `GET` | `/api/config` | Runtime capabilities and model names; never returns secrets |
+| `POST` | `/api/runs` | Execute one pattern |
 | `DELETE` | `/api/cache` | Clear the in-memory workshop response cache |
 
 Example request:
@@ -385,8 +376,7 @@ Example request:
 ```json
 {
   "patternId": "router",
-  "input": "Why does my Java stream return an empty list after I add a filter?",
-  "mode": "demo"
+  "input": "Why does my Java stream return an empty list after I add a filter?"
 }
 ```
 
@@ -397,7 +387,6 @@ $baseUrl = "http://localhost:8080"
 $body = @{
   patternId = "triage"
   input = "What does HTTP 429 mean?"
-  mode = "demo"
 } | ConvertTo-Json
 
 Invoke-RestMethod `
@@ -419,8 +408,7 @@ Invoke-RestMethod `
 │   └── resources.bicep                # Container Apps, ACR, identity, monitoring, models
 ├── src/main/java/com/example/tokenpatterns/
 │   ├── agent/
-│   │   ├── DemoChatModel.java         # Deterministic workshop model
-│   │   ├── ModelCatalog.java          # Demo/Azure model selection and authentication
+│   │   ├── ModelCatalog.java          # Azure OpenAI model tiers and authentication
 │   │   └── PatternAgents.java         # AI and non-AI agent definitions
 │   ├── domain/                        # API records and graph definitions
 │   ├── service/
@@ -447,7 +435,7 @@ Run a clean package build before deployment:
 .\mvnw.cmd clean package
 ```
 
-The test suite executes all eight demo workflows, validates the API, confirms that a repeated cache request makes zero model calls, and checks parallel mapper fan-out.
+The test suite executes all eight workflows against a deterministic stub `ChatModel`, validates the API, confirms that a repeated cache request makes zero model calls, and checks parallel mapper fan-out. Tests never require Azure or network access.
 
 ## Troubleshooting
 
@@ -491,15 +479,15 @@ That response is from the GitHub Copilot request layer, not the TokenFlow Contai
 - The Container App is configured with `minReplicas: 0`, so idle compute can scale to zero.
 - Deactivating its only revision stops serving requests and container compute.
 - ACR image storage, retained logs, and other provisioned resources can still incur charges while the app is stopped.
-- Azure OpenAI usage is driven by model calls; keep live mode off during a credential-free workshop when model responses are not needed.
+- Azure OpenAI usage is driven by model calls; stop the Container App when the lab is not in use.
 - Use `azd down --purge --force --no-prompt` when the complete environment is no longer required.
 
 ## Versions
 
 - Java 21
 - Spring Boot 4.1.0
-- LangChain4j 1.17.2
-- LangChain4j Agentic 1.17.2-beta27
+- LangChain4j 1.19.0
+- LangChain4j Agentic 1.19.0-beta29
 - GPT-5.6 model version 2026-07-09
 
 The Agentic module is experimental and can change between releases. Keep it pinned and rerun the full test suite during upgrades.

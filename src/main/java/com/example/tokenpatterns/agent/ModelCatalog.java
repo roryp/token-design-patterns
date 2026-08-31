@@ -16,14 +16,8 @@ public class ModelCatalog {
     private final String smallModelName;
     private final String mediumModelName;
     private final String largeModelName;
-    private final ModelSet demoModels = new ModelSet(
-            new DemoChatModel("demo-small", 35),
-            new DemoChatModel("demo-medium", 55),
-            new DemoChatModel("demo-large", 85),
-            "Deterministic workshop models",
-            false);
 
-    private volatile ModelSet liveModels;
+    private volatile ModelSet models;
 
     public ModelCatalog(TokenPatternProperties properties) {
         this.apiKey = properties.apiKey() == null ? "" : properties.apiKey().strip();
@@ -34,37 +28,33 @@ public class ModelCatalog {
         this.largeModelName = properties.largeModel();
     }
 
-    public ModelSet modelsFor(String mode) {
-        if (!"live".equalsIgnoreCase(mode)) {
-            return demoModels;
-        }
-        if (!liveEnabled()) {
+    public ModelSet models() {
+        if (!configured()) {
             throw new IllegalStateException(
-                    "Live mode requires AZURE_OPENAI_ENDPOINT plus managed identity or OPENAI_API_KEY");
+                    "Azure OpenAI is not configured: set AZURE_OPENAI_ENDPOINT plus managed identity or OPENAI_API_KEY");
         }
-        ModelSet current = liveModels;
+        ModelSet current = models;
         if (current == null) {
             synchronized (this) {
-                current = liveModels;
+                current = models;
                 if (current == null) {
                     current = new ModelSet(
                             createOpenAiModel(smallModelName),
                             createOpenAiModel(mediumModelName),
                             createOpenAiModel(largeModelName),
-                            "OpenAI: " + smallModelName + " / " + mediumModelName + " / " + largeModelName,
-                            true);
-                    liveModels = current;
+                            "OpenAI: " + smallModelName + " / " + mediumModelName + " / " + largeModelName);
+                    models = current;
                 }
             }
         }
         return current;
     }
 
-    public boolean liveEnabled() {
+    public boolean configured() {
         return !endpoint.isBlank() && (managedIdentity || !apiKey.isBlank());
     }
 
-    public String liveModelSummary() {
+    public String modelSummary() {
         return smallModelName + " / " + mediumModelName + " / " + largeModelName;
     }
 
@@ -72,7 +62,8 @@ public class ModelCatalog {
         var builder = AzureOpenAiChatModel.builder()
                 .endpoint(endpoint)
                 .deploymentName(modelName)
-                .maxCompletionTokens(700)
+                // Reasoning tokens count toward this budget; too low a cap returns empty content.
+                .maxCompletionTokens(2000)
                 .maxRetries(2)
                 .timeout(Duration.ofSeconds(60));
         if (managedIdentity) {
@@ -87,7 +78,6 @@ public class ModelCatalog {
             ChatModel small,
             ChatModel medium,
             ChatModel large,
-            String label,
-            boolean live) {
+            String label) {
     }
 }

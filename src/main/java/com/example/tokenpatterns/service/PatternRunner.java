@@ -71,8 +71,7 @@ public class PatternRunner {
 
     public PatternRunResult run(PatternRunRequest request) {
         PatternDefinition definition = catalog.get(request.patternId());
-        String mode = request.normalizedMode();
-        ModelSet models = modelCatalog.modelsFor(mode);
+        ModelSet models = modelCatalog.models();
         TraceCollector trace = new TraceCollector(definition);
         long startedAt = System.nanoTime();
 
@@ -109,7 +108,6 @@ public class PatternRunner {
         return new PatternRunResult(
                 UUID.randomUUID().toString(),
                 definition.id(),
-                mode,
                 outcome.output(),
                 metrics,
                 trace.events(),

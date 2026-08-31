@@ -5,10 +5,5 @@ import jakarta.validation.constraints.Size;
 
 public record PatternRunRequest(
         @NotBlank String patternId,
-        @NotBlank @Size(max = 12_000) String input,
-        String mode) {
-
-    public String normalizedMode() {
-        return "live".equalsIgnoreCase(mode) ? "live" : "demo";
-    }
+        @NotBlank @Size(max = 12_000) String input) {
 }

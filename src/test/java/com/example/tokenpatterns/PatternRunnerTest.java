@@ -8,10 +8,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Import(StubModelConfiguration.class)
 class PatternRunnerTest {
 
     @Autowired
@@ -30,13 +32,11 @@ class PatternRunnerTest {
         for (var pattern : catalog.all()) {
             PatternRunResult result = runner.run(new PatternRunRequest(
                     pattern.id(),
-                    pattern.sampleInput(),
-                    "demo"));
+                    pattern.sampleInput()));
 
             assertThat(result.output()).as(pattern.id()).isNotBlank();
             assertThat(result.trace()).as(pattern.id()).isNotEmpty();
             assertThat(result.metrics().orchestrationSteps()).isEqualTo(result.trace().size());
-            assertThat(result.mode()).isEqualTo("demo");
         }
     }
 
@@ -44,8 +44,7 @@ class PatternRunnerTest {
     void repeatedCacheRequestSkipsTheModel() {
         PatternRunRequest request = new PatternRunRequest(
                 "caching",
-                "What is idempotency and why does it matter for retries?",
-                "demo");
+                "What is idempotency and why does it matter for retries?");
 
         PatternRunResult miss = runner.run(request);
         PatternRunResult hit = runner.run(request);
@@ -62,8 +61,7 @@ class PatternRunnerTest {
     void batchMapperRunsEachIndependentItem() {
         PatternRunResult result = runner.run(new PatternRunRequest(
                 "batching",
-                "Explain routing; Explain RAG; Explain caching",
-                "demo"));
+                "Explain routing; Explain RAG; Explain caching"));
 
         assertThat(result.metrics().concurrency()).isEqualTo(3);
         assertThat(result.metrics().modelCalls()).isEqualTo(3);
