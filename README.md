@@ -2,7 +2,7 @@
 
 **An interactive LangChain4j Agentic workshop for designing AI flows that spend tokens deliberately.**
 
-TokenFlow Lab turns eight token-efficiency patterns into runnable workflows, animated execution graphs, shared-state inspection, and honest token/latency measurements. It is designed for live developer sessions: every pattern has a sample prompt, visual trace, teaching notes, and a deterministic credential-free mode.
+TokenFlow Lab turns eight token-efficiency patterns into runnable workflows, animated execution graphs, shared-state inspection, and honest token/latency measurements. It is designed for live developer sessions: every pattern has a sample prompt, visual trace, and teaching notes.
 
 > The application runs against Azure OpenAI GPT-5.6 through managed identity. Configure an endpoint and deployments before starting it.
 
@@ -44,7 +44,7 @@ The UI makes the trade-offs visible:
 - animated SVG execution topology;
 - model and non-AI agent spans;
 - `AgenticScope` state passed between agents;
-- provider token usage in live mode;
+- provider token usage reported by Azure OpenAI;
 - projected baseline versus observed tokens;
 - cache-hit and concurrency behavior;
 - pattern-specific cautions and validation metrics.
@@ -439,9 +439,9 @@ The test suite executes all eight workflows against a deterministic stub `ChatMo
 
 ## Troubleshooting
 
-### Live mode is disabled
+### The run button is disabled
 
-`/api/config` enables live mode only when `AZURE_OPENAI_ENDPOINT` is set and either managed identity or an API key is configured. In Azure, verify the Container App environment variables and identity assignment.
+`/api/config` reports `modelsConfigured: true` only when `AZURE_OPENAI_ENDPOINT` is set and either managed identity or an API key is configured. In Azure, verify the Container App environment variables and identity assignment.
 
 ### Azure OpenAI returns 401 or 403
 

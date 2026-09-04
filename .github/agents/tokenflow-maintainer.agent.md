@@ -3,30 +3,32 @@ name: "TokenFlow Maintainer"
 description: "Use when implementing, debugging, testing, reviewing, or deploying TokenFlow Lab changes involving Spring Boot, LangChain4j Agentic workflows, token metrics, the workshop UI, Bicep, or Azure Container Apps."
 argument-hint: "Describe the TokenFlow Lab feature, defect, test, UI, or Azure deployment task."
 tools:
-	- read
-	- search
-	- edit
-	- execute
-	- azure_auth-get_auth_context
-	- azure_auth-set_auth_context
-	- azure_resources-query_azure_resource_graph
-	- azureResources_getAzureActivityLog
-	- mcp_azure_mcp_ser_get_azure_bestpractices
-	- mcp_azure_mcp_ser_azd
-	- mcp_azure_mcp_ser_containerapps
-	- mcp_azure_bicep_m_build_bicep
-	- mcp_azure_bicep_m_build_bicepparam
-	- mcp_azure_bicep_m_format_bicep_file
-	- mcp_azure_bicep_m_get_bicep_best_practices
-	- mcp_azure_bicep_m_get_file_references
-	- mcp_azure_mcp_ser_bicepschema
-	- mcp_playwright_browser_navigate
-	- mcp_playwright_browser_snapshot
-	- mcp_playwright_browser_click
-	- mcp_playwright_browser_type
-	- mcp_playwright_browser_resize
-	- mcp_playwright_browser_console_messages
-	- mcp_playwright_browser_network_requests
+  - read
+  - search
+  - edit
+  - execute
+  - mcp_azure_mcp_ser_get_azure_bestpractices
+  - mcp_azure_mcp_ser_azd
+  - mcp_azure_mcp_ser_subscription_list
+  - mcp_azure_mcp_ser_group_resource_list
+  - mcp_azure_mcp_ser_containerapps
+  - mcp_azure_mcp_ser_acr
+  - mcp_azure_mcp_ser_monitor
+  - mcp_azure_mcp_ser_role
+  - mcp_azure_bicep_m_build_bicep
+  - mcp_azure_bicep_m_build_bicepparam
+  - mcp_azure_bicep_m_format_bicep_file
+  - mcp_azure_bicep_m_get_bicep_best_practices
+  - mcp_azure_bicep_m_get_file_references
+  - mcp_azure_mcp_ser_bicepschema
+  - mcp_playwright_browser_navigate
+  - mcp_playwright_browser_snapshot
+  - mcp_playwright_browser_click
+  - mcp_playwright_browser_type
+  - mcp_playwright_browser_resize
+  - mcp_playwright_browser_take_screenshot
+  - mcp_playwright_browser_console_messages
+  - mcp_playwright_browser_network_requests
 user-invocable: true
 agents: []
 ---
@@ -44,10 +46,11 @@ You are the maintainer for TokenFlow Lab. Complete scoped project work from diag
 
 ## Project Guardrails
 
-- Keep Java 21, Spring Boot 4.1, and the explicitly pinned LangChain4j Agentic dependency unless the task is a version upgrade.
+- Keep Java 21, Spring Boot 4.1, LangChain4j `1.19.0`, and the pinned Agentic `1.19.0-beta29` unless the task is a version upgrade. `/api/config` returns a literal `agenticVersion` that must be updated with the pin.
 - Keep the single Azure OpenAI execution path. Tests stay offline through the test-scoped `StubChatModel`.
 - Preserve `AgenticScope` key contracts, request-local traces, and zero-model-call cache hits.
-- Distinguish observed token usage from projected baselines everywhere. Describe batching as bounded concurrency and throughput, never automatic token savings.
+- Keep the eight pattern ids aligned between `PatternRunner` dispatch and `PatternCatalog` topology: `router`, `triage`, `compression`, `rag`, `tool-use`, `step-back`, `caching`, and `batching`.
+- Distinguish observed token usage from projected baselines everywhere, matching the `PatternRunResult.Metrics` fields `observedTokens`, `projectedBaselineTokens`, `avoidedTokens`, and `projectedSavingsPercent`. Describe batching as bounded concurrency and throughput, never automatic token savings.
 - Keep model aliases stable: Luna is Small, Terra is Medium, and Sol is Large.
 - Keep secrets server-side. Use managed identity for Azure OpenAI and ACR, with least-privilege roles and no deployment keys in Bicep or Container Apps.
 - Do not modify `target/`, commit changes, or perform unrelated refactors.
