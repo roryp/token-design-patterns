@@ -54,4 +54,33 @@ class PatternControllerTest {
                 .andExpect(jsonPath("$.metrics.modelCalls").value(1))
                 .andExpect(jsonPath("$.trace.length()").isNumber());
     }
+
+    @Test
+    void reportsProviderThrottlingAsRateLimitedRatherThanServerError() throws Exception {
+        mockMvc.perform(post("/api/runs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "patternId": "triage",
+                                  "input": "Explain backpressure %s"
+                                }
+                                """.formatted(StubChatModel.RATE_LIMIT_TRIGGER)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.title").value("Model provider rate limit reached"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("throttled")));
+    }
+
+    @Test
+    void rejectsAnUnknownPatternAsABadRequest() throws Exception {
+        mockMvc.perform(post("/api/runs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "patternId": "does-not-exist",
+                                  "input": "hello"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Pattern run could not be started"));
+    }
 }

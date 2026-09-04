@@ -71,8 +71,8 @@ public class PatternRunner {
 
     public PatternRunResult run(PatternRunRequest request) {
         PatternDefinition definition = catalog.get(request.patternId());
-        ModelSet models = modelCatalog.models();
         TraceCollector trace = new TraceCollector(definition);
+        ModelSet models = trace.instrument(modelCatalog.models());
         long startedAt = System.nanoTime();
 
         RunOutcome outcome = switch (definition.id()) {
@@ -112,7 +112,7 @@ public class PatternRunner {
                 metrics,
                 trace.events(),
                 sanitizeScope(outcome.scope()),
-                takeaways(definition.id(), outcome),
+                takeaways(definition.id(), outcome, trace),
                 Instant.now());
     }
 
@@ -307,7 +307,7 @@ public class PatternRunner {
             case "compression" -> Math.max(minimum, observed + estimateTokens(LONG_INCIDENT_CONTEXT) * 2);
             case "rag" -> Math.max(minimum, observed + estimateTokens(LocalKnowledgeRetriever.fullCorpus()) * 2);
             case "tool-use" -> Math.max(minimum, (int) Math.ceil(observed * 1.55));
-            case "step-back" -> Math.max(minimum, (int) Math.ceil(observed * 1.3));
+            case "step-back" -> observed;
             case "caching" -> outcome.cacheHit() ? Math.max(160, minimum) : observed;
             case "batching" -> observed;
             default -> minimum;
@@ -318,6 +318,9 @@ public class PatternRunner {
         if ("batching".equals(patternId)) {
             return "Observed model tokens are unchanged; batching is measured primarily by wall time and throughput.";
         }
+        if ("step-back".equals(patternId)) {
+            return "Planning adds tokens to this turn; step-back pays back across avoided retries and rework, which one run cannot measure.";
+        }
         if ("caching".equals(patternId)) {
             return cacheHit
                     ? "Observed cache hit versus the estimated tokens needed to regenerate the same stable answer."
@@ -326,7 +329,7 @@ public class PatternRunner {
         return "Observed run tokens versus a modeled monolithic large-model baseline. Validate the projection with provider telemetry.";
     }
 
-    private static List<String> takeaways(String patternId, RunOutcome outcome) {
+    private static List<String> takeaways(String patternId, RunOutcome outcome, TraceCollector trace) {
         return switch (patternId) {
             case "router" -> List.of(
                     "Only one specialist path was activated.",
@@ -349,9 +352,11 @@ public class PatternRunner {
                     "The model explained a verified result instead of recreating it.",
                     "Add authorization and timeouts before tools perform side effects.");
             case "step-back" -> List.of(
-                    "The plan constrained the final answer and reduced option churn.",
-                    "Planning is valuable when retries are expensive, not for every prompt.",
-                    "Measure rework avoided rather than counting only this turn's tokens.");
+                    "The plan cost %d output tokens and framed a %d token answer.".formatted(
+                            trace.outputTokensFor("Step-back planner"),
+                            trace.outputTokensFor("Plan executor")),
+                    "No token saving is claimed for a single turn; planning is an investment against retries.",
+                    "Measure rework avoided, retry rate, and completion rate across turns.");
             case "caching" -> List.of(
                     outcome.cacheHit() ? "This repeat request made zero model calls." : "This first request populated the exact-match cache.",
                     "Run the same prompt again to see the hit path.",

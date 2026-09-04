@@ -67,4 +67,40 @@ class PatternRunnerTest {
         assertThat(result.metrics().modelCalls()).isEqualTo(3);
         assertThat(result.output()).contains("1.", "2.", "3.");
     }
+
+    /** Planning adds tokens to the turn it runs in, so no single-turn saving may be claimed. */
+    @Test
+    void stepBackClaimsNoSingleTurnTokenSaving() {
+        PatternRunResult result = runner.run(new PatternRunRequest(
+                "step-back",
+                "Design a safe migration from a monolith to event-driven services."));
+
+        assertThat(result.metrics().projectedBaselineTokens()).isEqualTo(result.metrics().observedTokens());
+        assertThat(result.metrics().avoidedTokens()).isZero();
+        assertThat(result.metrics().projectedSavingsPercent()).isZero();
+        assertThat(result.metrics().basis()).contains("retries");
+        assertThat(result.takeaways().getFirst()).matches("The plan cost \\d+ output tokens and framed a \\d+ token answer\\.");
+    }
+
+    /** Parallel workers share one agent proxy and scope, so usage must come from each model call itself. */
+    @Test
+    void parallelBatchWorkersEachReportTheirOwnUsage() {
+        for (int attempt = 1; attempt <= 50; attempt++) {
+            PatternRunResult result = runner.run(new PatternRunRequest(
+                    "batching",
+                    "Explain routing; Explain RAG; Explain caching"));
+
+            var modelEvents = result.trace().stream()
+                    .filter(event -> "model".equals(event.kind()))
+                    .toList();
+
+            assertThat(modelEvents).as("attempt %d", attempt).hasSize(3);
+            assertThat(modelEvents).as("attempt %d", attempt).allSatisfy(event ->
+                    assertThat(event.inputTokens() + event.outputTokens()).isPositive());
+            assertThat(result.metrics().observedTokens()).as("attempt %d", attempt)
+                    .isEqualTo(modelEvents.stream()
+                            .mapToInt(event -> event.inputTokens() + event.outputTokens())
+                            .sum());
+        }
+    }
 }

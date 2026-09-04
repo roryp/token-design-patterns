@@ -293,7 +293,8 @@ public final class PatternAgents {
 
         @UserMessage("""
                 [PLAN_EXECUTOR]
-                Execute the plan as a concise recommendation. Do not reopen options that the plan already resolved.
+                Execute the plan as a concise recommendation of at most 200 words.
+                Give each plan step one short paragraph. Do not reopen options that the plan already resolved.
                 PLAN: {{plan}}
                 REQUEST: {{request}}
                 """)

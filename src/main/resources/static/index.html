@@ -989,6 +989,8 @@
     }
 
     .teaching-panel {
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
     }
 
@@ -1002,6 +1004,12 @@
       margin: 5px 0 0;
       font-size: 1rem;
       letter-spacing: -0.02em;
+    }
+
+    .teaching-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
     }
 
     .teaching-section {

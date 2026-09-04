@@ -5,6 +5,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -17,6 +18,9 @@ import java.util.stream.Collectors;
 /** Deterministic stand-in so tests exercise the real orchestration without model credentials. */
 public final class StubChatModel implements ChatModel {
 
+    /** Prompts containing this marker make the stub fail the way a throttled provider does. */
+    public static final String RATE_LIMIT_TRIGGER = "TRIGGER_RATE_LIMIT";
+
     private final String modelName;
 
     public StubChatModel(String modelName) {
@@ -28,6 +32,10 @@ public final class StubChatModel implements ChatModel {
         String prompt = request.messages().stream()
                 .map(StubChatModel::textOf)
                 .collect(Collectors.joining("\n"));
+
+        if (prompt.contains(RATE_LIMIT_TRIGGER)) {
+            throw new RateLimitException("Requests to the ChatCompletions_Create Operation have exceeded rate limit");
+        }
 
         String response = respond(prompt);
         int inputTokens = estimateTokens(prompt);

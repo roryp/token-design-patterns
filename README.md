@@ -8,7 +8,7 @@ TokenFlow Lab turns eight token-efficiency patterns into runnable workflows, ani
 
 ![TokenFlow Lab overview of eight agent design patterns for deliberate token spend](docs/images/tokenflow-patterns-overview.svg)
 
-The overview deliberately labels savings as projections and treats batching as a throughput pattern with **0% automatic token saving**, matching the implemented workflows.
+The overview deliberately labels savings as projections. Step-back planning and batching claim **no single-turn token saving**: step-back is judged by rework avoided and batching by throughput, matching the implemented workflows.
 
 ## Contents
 
@@ -62,7 +62,7 @@ The UI makes the trade-offs visible:
 | 7 | Caching | Lookup agent + conditional miss path | A cache hit makes zero model calls | Hit rate, freshness, and tenant isolation |
 | 8 | Batching | `parallelMapperBuilder()` | Improve throughput with bounded concurrency | Wall time, throughput, and throttling |
 
-Batching does **not** inherently reduce content tokens. The lab reports it as a throughput pattern rather than claiming token savings.
+Batching does **not** inherently reduce content tokens, and step-back planning *adds* tokens to the turn it runs in. The lab reports both as zero-saving patterns and measures them by throughput and rework avoided instead.
 
 ## Quick start
 
@@ -178,7 +178,7 @@ The Bicep deployment creates:
 | Azure Container Registry | Basic SKU, admin credentials disabled |
 | User-assigned managed identity | Shared by ACR image pull and model access |
 | Azure OpenAI | Local authentication disabled; managed identity required |
-| GPT-5.6 deployments | Version `2026-07-09`, `GlobalStandard`, capacity 10 each |
+| GPT-5.6 deployments | Version `2026-07-09`, `GlobalStandard`, capacity 100 each |
 | Log Analytics | 30-day retention |
 | Application Insights | Workspace-based telemetry resource |
 
@@ -246,11 +246,9 @@ azd env get-value AZURE_CONTAINER_APP_URL
 azd env get-value AZURE_OPENAI_ENDPOINT
 ```
 
-The verified dev deployment URL is:
+`AZURE_CONTAINER_APP_URL` is the deployed workshop URL. Read it from the selected environment rather than reusing a URL from a previous provision, because the resource token changes whenever the environment is recreated.
 
-`https://ca-tokenflow-dev-ozhotol5yje76.greenisland-6c1059fd.eastus2.azurecontainerapps.io/`
-
-The dev Container App may be intentionally stopped. A `404` from this URL with no active revision is expected; use the start procedure below.
+The dev Container App may be intentionally stopped. A `404` from that URL with no active revision is expected; use the start procedure below.
 
 ## Operate the Azure deployment
 
@@ -358,7 +356,7 @@ Review the target subscription and environment before running this destructive c
 - **Caching** claims no savings on the first miss and 100% model-token avoidance only on an exact hit.
 - **Batching** reports zero content-token savings. Its primary measurements are elapsed time and concurrency.
 - **Tool use** may improve correctness and auditability even when immediate token savings are modest.
-- **Step-back planning** should be evaluated through retries and rework avoided, not just tokens in one request.
+- **Step-back planning** reports zero single-turn savings because planning *adds* tokens to the current request. Its projected baseline equals observed usage, and the run reports the measured plan size against the answer it framed. Judge it by retries and rework avoided across turns.
 
 For production decisions, pair token telemetry with task success, latency, routing accuracy, retrieval recall, groundedness, cache freshness, and provider cost data.
 
@@ -370,6 +368,8 @@ For production decisions, pair token telemetry with task success, latency, routi
 | `GET` | `/api/config` | Runtime capabilities and model names; never returns secrets |
 | `POST` | `/api/runs` | Execute one pattern |
 | `DELETE` | `/api/cache` | Clear the in-memory workshop response cache |
+
+`POST /api/runs` returns `400` for an unknown pattern or empty input, `429` when Azure OpenAI throttles the run, and `502` when the model provider fails for another reason. All failures use `ProblemDetail`.
 
 Example request:
 
@@ -453,6 +453,21 @@ The test suite executes all eight workflows against a deterministic stub `ChatMo
 ### A GPT-5.6 request returns a transient 500
 
 Retry once, then inspect Container App logs. During validation, Luna, Terra, and Sol all completed live managed-identity requests; one Sol request returned a transient provider 500 before succeeding on retry.
+
+### A run returns `429 Model provider rate limit reached`
+
+Azure OpenAI throttled the run. Deployment capacity sets both limits: capacity 10 allows only 10 requests per minute, and a single batching run issues one request per item. Capacity 100 raises this to 100 requests per minute and 100,000 tokens per minute.
+
+```powershell
+$resourceGroup = azd env get-value AZURE_RESOURCE_GROUP
+az cognitiveservices account deployment list `
+  --resource-group $resourceGroup `
+  --name <openai-account-name> `
+  --query "[].{name:name,capacity:sku.capacity}" `
+  --output table
+```
+
+Raise `modelCapacity` in `infra/main.bicep` and reprovision, or increase capacity in place when the running app must not be interrupted.
 
 ### The endpoint returns 404 after the app was stopped
 

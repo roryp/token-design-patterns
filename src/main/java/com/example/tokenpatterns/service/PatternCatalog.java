@@ -184,7 +184,7 @@ public class PatternCatalog {
 
     private static PatternDefinition stepBack() {
         return new PatternDefinition(
-                "step-back", 6, "Step-back planning", "plan", "20–40% projected",
+                "step-back", 6, "Step-back planning", "plan", "Rework, not tokens",
                 "Spend a few planning tokens to avoid expensive wandering.",
                 "A planner resolves goals, constraints, and sequencing before a second agent writes the recommendation.",
                 "A sequential Agentic workflow shares a compact plan instead of repeatedly rediscovering the problem frame.",

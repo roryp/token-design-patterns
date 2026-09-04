@@ -7,6 +7,9 @@ import com.example.tokenpatterns.domain.PatternRunResult;
 import com.example.tokenpatterns.service.PatternCatalog;
 import com.example.tokenpatterns.service.PatternRunner;
 import jakarta.validation.Valid;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.exception.LangChain4jException;
+import dev.langchain4j.exception.RateLimitException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -65,5 +68,36 @@ public class PatternController {
         problem.setTitle("Pattern run could not be started");
         problem.setType(URI.create("https://example.com/problems/pattern-run"));
         return problem;
+    }
+
+    @ExceptionHandler(LangChain4jException.class)
+    public ProblemDetail modelProviderFailure(LangChain4jException exception) {
+        if (isRateLimited(exception)) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "Azure OpenAI throttled this run. Wait a few seconds and run the pattern again, "
+                            + "or raise the deployment capacity if a whole room is running the lab.");
+            problem.setTitle("Model provider rate limit reached");
+            problem.setType(URI.create("https://example.com/problems/rate-limit"));
+            return problem;
+        }
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_GATEWAY,
+                "The model provider did not complete this run: " + exception.getMessage());
+        problem.setTitle("Model provider call failed");
+        problem.setType(URI.create("https://example.com/problems/model-provider"));
+        return problem;
+    }
+
+    private static boolean isRateLimited(Throwable throwable) {
+        Throwable current = throwable;
+        for (int depth = 0; current != null && depth < 10; depth++) {
+            if (current instanceof RateLimitException
+                    || (current instanceof HttpException http && http.statusCode() == 429)) {
+                return true;
+            }
+            current = current.getCause() == current ? null : current.getCause();
+        }
+        return false;
     }
 }

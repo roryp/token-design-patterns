@@ -1,5 +1,6 @@
 package com.example.tokenpatterns.service;
 
+import com.example.tokenpatterns.agent.ModelCatalog.ModelSet;
 import com.example.tokenpatterns.agent.PatternAgents.NonAiObserver;
 import com.example.tokenpatterns.domain.PatternDefinition;
 import com.example.tokenpatterns.domain.PatternRunResult.TraceEvent;
@@ -7,6 +8,14 @@ import dev.langchain4j.agentic.observability.AgentInvocationError;
 import dev.langchain4j.agentic.observability.AgentListener;
 import dev.langchain4j.agentic.observability.AgentRequest;
 import dev.langchain4j.agentic.observability.AgentResponse;
+import dev.langchain4j.model.ModelProvider;
+import dev.langchain4j.model.chat.Capability;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.ChatRequestOptions;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.TokenUsage;
 
 import java.util.ArrayDeque;
@@ -17,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class TraceCollector implements AgentListener, NonAiObserver {
 
@@ -32,6 +42,19 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
         this.definition = definition;
     }
 
+    /** Wraps each tier so usage is read from the model call itself, not from scope state shared by parallel agents. */
+    public ModelSet instrument(ModelSet models) {
+        return new ModelSet(
+                instrument(models.small()),
+                instrument(models.medium()),
+                instrument(models.large()),
+                models.label());
+    }
+
+    public ChatModel instrument(ChatModel delegate) {
+        return new TracingChatModel(delegate, this);
+    }
+
     @Override
     public void beforeAgentInvocation(AgentRequest request) {
         spans.get().push(new PendingSpan(
@@ -44,18 +67,19 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
     @Override
     public void afterAgentInvocation(AgentResponse response) {
         PendingSpan span = pop(response.agentName());
-        TokenUsage usage = response.chatResponse() == null ? null : response.chatResponse().tokenUsage();
+        ChatResponse chatResponse = span.modelResponse().get();
+        TokenUsage usage = chatResponse == null ? null : chatResponse.tokenUsage();
         int inputTokens = usage == null || usage.inputTokenCount() == null ? 0 : usage.inputTokenCount();
         int outputTokens = usage == null || usage.outputTokenCount() == null ? 0 : usage.outputTokenCount();
-        String model = response.chatResponse() == null || response.chatResponse().modelName() == null
+        String model = chatResponse == null || chatResponse.modelName() == null
                 ? ""
-                : response.chatResponse().modelName();
+                : chatResponse.modelName();
 
         events.add(new TraceEvent(
                 span.sequence(),
                 response.agentName(),
                 definition.nodeFor(response.agentName()),
-                kind(response.agentName(), response.chatResponse() != null),
+                kind(response.agentName(), chatResponse != null),
                 model,
                 elapsedMillis(span.startedAtNanos()),
                 inputTokens,
@@ -103,6 +127,13 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
         return (int) events().stream().filter(event -> "model".equals(event.kind())).count();
     }
 
+    public int outputTokensFor(String agentName) {
+        return events().stream()
+                .filter(event -> agentName.equals(event.agent()))
+                .mapToInt(TraceEvent::outputTokens)
+                .sum();
+    }
+
     @Override
     public void completed(String agentName, Object input, Object output, long durationMs) {
         events.add(new TraceEvent(
@@ -144,6 +175,15 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
         return Math.max(0, (System.nanoTime() - startedAtNanos) / 1_000_000);
     }
 
+    /** Binds usage to the agent currently executing on this thread, so a nested agent cannot claim its parent's call. */
+    private ChatResponse record(ChatResponse response) {
+        PendingSpan current = spans.get().peek();
+        if (current != null) {
+            current.modelResponse().set(response);
+        }
+        return response;
+    }
+
     private static String preview(Object value) {
         if (value == null) {
             return "";
@@ -161,6 +201,49 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
         return compact.length() <= 180 ? compact : compact.substring(0, 179) + "…";
     }
 
-    private record PendingSpan(int sequence, String agentName, long startedAtNanos, String inputPreview) {
+    private record PendingSpan(int sequence, String agentName, long startedAtNanos, String inputPreview,
+                               AtomicReference<ChatResponse> modelResponse) {
+
+        PendingSpan(int sequence, String agentName, long startedAtNanos, String inputPreview) {
+            this(sequence, agentName, startedAtNanos, inputPreview, new AtomicReference<>());
+        }
+    }
+
+    private record TracingChatModel(ChatModel delegate, TraceCollector collector) implements ChatModel {
+
+        @Override
+        public ChatResponse chat(ChatRequest request) {
+            return collector.record(delegate.chat(request));
+        }
+
+        @Override
+        public ChatResponse chat(ChatRequest request, ChatRequestOptions options) {
+            return collector.record(delegate.chat(request, options));
+        }
+
+        @Override
+        public ChatResponse doChat(ChatRequest request) {
+            return collector.record(delegate.doChat(request));
+        }
+
+        @Override
+        public ChatRequestParameters defaultRequestParameters() {
+            return delegate.defaultRequestParameters();
+        }
+
+        @Override
+        public List<ChatModelListener> listeners() {
+            return delegate.listeners();
+        }
+
+        @Override
+        public ModelProvider provider() {
+            return delegate.provider();
+        }
+
+        @Override
+        public Set<Capability> supportedCapabilities() {
+            return delegate.supportedCapabilities();
+        }
     }
 }

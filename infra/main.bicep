@@ -25,7 +25,7 @@ param modelSku string = 'GlobalStandard'
 
 @description('Capacity assigned to each GPT-5.6 deployment in thousands of tokens per minute.')
 @minValue(1)
-param modelCapacity int = 10
+param modelCapacity int = 100
 
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
