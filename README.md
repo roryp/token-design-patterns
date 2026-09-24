@@ -379,6 +379,10 @@ For production decisions, pair token telemetry with task success, latency, routi
 
 `POST /api/runs` returns `400` for an unknown pattern or empty input, `429` when Azure OpenAI throttles the run, and `502` when the model provider fails for another reason. All failures use `ProblemDetail`.
 
+Batching accepts one to six non-empty items separated by semicolons or newlines. A single item makes one model call; the application never invents extra tasks. More than six items, or separators without any content, return `400` before model initialization instead of silently dropping work. The sample names LLM routing explicitly to avoid confusion with HTTP routing.
+
+The complex triage responder produces a bounded recommendation in at most 150 words: Decision frame, Next step, and Validation. The completion budget remains 2,000 tokens, including reasoning. A truncated or filtered response is still a failure. Provider errors are classified through the Agentic cause chain, so the UI receives actionable messages for output limits, authentication, throttling, and other failures rather than a reflection-wrapper method signature. Logs retain sanitized categories and numeric usage, not prompts or credentials.
+
 For `patternId: "caching"`, optional `cacheEnabled` defaults to `true`; send `false` to bypass cache reads and writes on that call. The flag does not enable caching on other patterns. The former local `metrics.cacheHit` boolean was removed; clients should use the provider-derived `metrics.cacheStatus`. Aggregate metrics now include input/output counts and nullable provider cache/reasoning counts. Each model trace span carries the same provider detail fields.
 
 Example request:
@@ -466,6 +470,10 @@ node --test .\scripts\cache-flow.test.mjs
 They cover HIT, MISS with and without writes, mixed read/write hits, bypass, missing telemetry, inconsistent receipts, and isolation between runs. Browser validation must also check the rendered branch classes, pending/error states, viewport changes, reduced motion, and the return path against both test fixtures and real provider receipts.
 
 The unversioned HTML and JavaScript resources send `Cache-Control: no-cache` so browsers revalidate them after deployments. An already-open page must still be reloaded to use a new UI; no timestamp query strings or forced cache-busting URLs are required.
+
+For a complete real-model browser regression, run `.\scripts\Prepare-PlaywrightSuites.ps1`, load the intended local or Azure URL in Playwright MCP, then use `browser_run_code` with each generated `filename`: `.playwright-mcp\patterns-desktop.js`, `patterns-mobile.js`, `patterns-branches.js`, and `patterns-inputs.js` in that same directory. The wrappers use the shared `testPatterns` function in `scripts/playwright-patterns.mjs`; no test code is served by the application. Separate calls keep the run inside the MCP execution window.
+
+This intentionally makes paid model calls. It covers all eight patterns at desktop and mobile widths, additional router and deep-triage branches, cache bypass, one/six/oversized batches, empty-input feedback, and graph scroll reset. It compares rendered metrics and animated nodes with each actual `/api/runs` response, never mocks provider usage, and returns explicit pass/fail results. Non-2xx responses for invalid batch cases are expected. Every suite must report `failed: 0` and an empty `pageErrors` list.
 
 ### Live provider verification
 

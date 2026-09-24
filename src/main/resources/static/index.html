@@ -1769,7 +1769,7 @@
       elements.runNote.textContent = pattern.id === "caching"
         ? "Every run calls Azure. Repeat to test prefix reuse, or uncheck caching to bypass it. Hits are not guaranteed; Azure manages retention."
         : pattern.id === "batching"
-          ? "Semicolon-separate up to six independent items."
+          ? "Enter one to six independent items, separated by semicolons or newlines. Each item makes one model call."
           : "Each run executes the real LangChain4j Agentic workflow.";
       elements.teachingTitle.textContent = pattern.name;
       elements.mechanismText.textContent = pattern.mechanism;
@@ -1886,6 +1886,7 @@
       });
       svg.append(nodeLayer);
       elements.flowViewport.replaceChildren(svg);
+      elements.flowViewport.scrollLeft = 0;
       state.graph = { svg, nodePositions };
     }
 
@@ -1992,6 +1993,7 @@
         svg.append(group);
       }
       elements.flowViewport.replaceChildren(svg);
+      elements.flowViewport.scrollLeft = 0;
       state.graph = { svg, cache: true };
       if (state.cachePlan) {
         prepareCacheFlow(state.cachePlan);
@@ -2117,13 +2119,22 @@
     }
 
     async function runCurrentPattern() {
-      if (!state.current || elements.runButton.disabled || !state.config?.modelsConfigured || !elements.promptInput.value.trim()) return;
+      if (!state.current || elements.runButton.disabled || !state.config?.modelsConfigured) return;
+      const input = elements.promptInput.value.trim();
+      if (!input) {
+        showError("Enter a request before running a pattern.");
+        elements.promptInput.setAttribute("aria-invalid", "true");
+        elements.promptInput.focus();
+        return;
+      }
       hideError();
+      elements.promptInput.removeAttribute("aria-invalid");
       state.animationToken += 1;
       const runToken = state.animationToken;
       state.cachePlan = null;
       state.cacheError = false;
       setRunning(true);
+      resetMetrics();
       resetGraphState();
       elements.cacheReceipt.hidden = true;
       elements.answerSubtitle.textContent = "Running…";
@@ -2141,7 +2152,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patternId: state.current.id,
-            input: elements.promptInput.value.trim(),
+            input,
             ...(state.current.id === "caching" ? { cacheEnabled: elements.cacheEnabled.checked } : {})
           })
         });
@@ -2155,6 +2166,8 @@
           showError(error.message);
           elements.answerSubtitle.textContent = "Run failed";
           elements.answerBody.replaceChildren(createElement("div", "answer-empty", error.message));
+          elements.traceSummary.textContent = "Run failed";
+          elements.traceList.replaceChildren(createElement("div", "trace-placeholder", "No completed trace: the run failed."));
           if (state.current.id === "caching") {
             state.cachePlan = null;
             state.cacheError = true;
@@ -2521,6 +2534,7 @@
 
     function updateCharCount() {
       elements.charCount.textContent = `${formatNumber(elements.promptInput.value.length)} / 12,000`;
+      elements.promptInput.removeAttribute("aria-invalid");
     }
 
     function formatNumber(value) {

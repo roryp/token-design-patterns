@@ -1,5 +1,6 @@
 package com.example.tokenpatterns.agent;
 
+import com.example.tokenpatterns.domain.ModelOutputLimitException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openai.client.OpenAIClient;
 import com.openai.core.ObjectMappers;
@@ -36,11 +37,14 @@ import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.service.V;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.util.List;
 import java.util.Map;
@@ -58,6 +62,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(OutputCaptureExtension.class)
 class OfficialSdkChatModelTest {
 
     private static final String DEPLOYMENT = "gpt-5.6-terra";
@@ -199,6 +204,35 @@ class OfficialSdkChatModelTest {
     }
 
     @Test
+    void deepTriageBoundsTheRecommendationWithoutIncreasingTheCompletionBudget() {
+        String question = "Design a secure distributed multi-region architecture for a payment system, "
+                + "including migration trade-offs.";
+        String answer = "Decision frame: Prioritize a consistent ledger and authenticated regional APIs.\n\n"
+                + "Next step: Migrate one shard at a time, trading temporary dual-run cost for a reversible cutover.\n\n"
+                + "Validation: Require failover within 60 seconds with zero duplicate ledger postings.";
+        when(completions.create(any(ChatCompletionCreateParams.class))).thenReturn(response(answer));
+        var model = new OfficialSdkChatModel(client, "gpt-5.6-sol", BYPASS);
+        var agent = AgenticServices.agentBuilder(PatternAgents.DeepReasoningResponder.class)
+                .chatModel(model).build();
+        var workflow = AgenticServices.sequenceBuilder().subAgents(agent)
+                .name("Offline deep-triage transport").outputKey("answer").build();
+
+        assertEquals(answer, workflow.invoke(Map.of("request", question)));
+        var params = capturedRequest();
+        assertEquals("gpt-5.6-sol", params.model().asString());
+        assertEquals(2000L, params.maxCompletionTokens().orElseThrow());
+        assertTrue(params.temperature().isEmpty());
+        assertTrue(params.promptCacheKey().isEmpty());
+        String prompt = params.messages().getFirst().asUser().content().asText();
+        assertTrue(prompt.contains("at most 150 words"));
+        assertTrue(prompt.contains("Decision frame, Next step, and Validation"));
+        assertTrue(prompt.contains("cover the request's key constraints and one trade-off"));
+        assertTrue(prompt.contains("give a measurable validation metric"));
+        assertTrue(prompt.contains("Do not enumerate alternatives or implementation details."));
+        assertTrue(prompt.contains("REQUEST: " + question));
+    }
+
+    @Test
     void returnsActualTotalsProviderMetadataAndTypedCacheAndReasoningSubsets() {
         var fixture = fixture("""
                 {"prompt_tokens":1000,"completion_tokens":100,"total_tokens":1100,
@@ -243,12 +277,13 @@ class OfficialSdkChatModelTest {
 
     @ParameterizedTest
     @MethodSource("malformedUsages")
-    void malformedOrMissingTelemetryFailsInsteadOfInventingUsage(String usage) {
+    void malformedOrMissingTelemetryFailsInsteadOfInventingUsage(String usage, CapturedOutput output) {
         when(completions.create(any(ChatCompletionCreateParams.class))).thenReturn(fixture(usage));
         var model = new OfficialSdkChatModel(client, DEPLOYMENT, BYPASS);
         var failure = assertThrows(LangChain4jException.class, () -> model.chat("question"));
         assertNull(failure.getCause());
         assertFalse(failure.getMessage().contains("sensitive-provider-value"));
+        assertFalse(output.getAll().contains("sensitive-provider-value"));
     }
 
     static Stream<String> malformedUsages() {
@@ -322,7 +357,7 @@ class OfficialSdkChatModelTest {
             assertInstanceOf(ContentFilteredException.class, failure);
             assertEquals("Azure OpenAI blocked the response with its content filter", failure.getMessage());
         } else {
-            assertEquals(LangChain4jException.class, failure.getClass());
+            assertInstanceOf(ModelOutputLimitException.class, failure);
             assertEquals("Azure OpenAI response was truncated because the completion token limit was reached",
                     failure.getMessage());
         }
@@ -407,15 +442,18 @@ class OfficialSdkChatModelTest {
     }
 
     @Test
-    void mapsConnectionTimeoutParsingAndCredentialFailuresToSanitizedProviderFailures() {
+    void mapsConnectionTimeoutParsingAndCredentialFailuresToSanitizedProviderFailures(CapturedOutput output) {
         var model = new OfficialSdkChatModel(client, DEPLOYMENT, BYPASS);
         for (RuntimeException sdkFailure : List.of(new OpenAIException("sensitive-provider-value"),
                 new IllegalStateException("sensitive-provider-value"))) {
-            when(completions.create(any(ChatCompletionCreateParams.class))).thenThrow(sdkFailure);
+            doThrow(sdkFailure).when(completions).create(any(ChatCompletionCreateParams.class));
             var failure = assertThrows(LangChain4jException.class, () -> model.chat("question"));
             assertEquals("Azure OpenAI request could not be completed", failure.getMessage());
             assertNull(failure.getCause());
         }
+        assertTrue(output.getAll().contains("errorType=OpenAIException"));
+        assertTrue(output.getAll().contains("errorType=IllegalStateException"));
+        assertFalse(output.getAll().contains("sensitive-provider-value"));
     }
 
     @Test

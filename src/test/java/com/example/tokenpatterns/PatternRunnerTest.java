@@ -4,12 +4,16 @@ import com.example.tokenpatterns.domain.PatternRunRequest;
 import com.example.tokenpatterns.domain.PatternRunResult;
 import com.example.tokenpatterns.service.PatternCatalog;
 import com.example.tokenpatterns.service.PatternRunner;
+import com.example.tokenpatterns.agent.ModelCatalog;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @SpringBootTest
 @Import(StubModelConfiguration.class)
@@ -109,6 +113,41 @@ class PatternRunnerTest {
         assertThat(result.metrics().concurrency()).isEqualTo(3);
         assertThat(result.metrics().modelCalls()).isEqualTo(3);
         assertThat(result.output()).contains("1.", "2.", "3.");
+    }
+
+    @Test
+    void aSingleBatchItemMakesExactlyOneCallWithoutInventedTasks() {
+        PatternRunResult result = runner.run(new PatternRunRequest(
+                "batching", "  Explain an LLM token.  "));
+        assertThat(result.metrics().modelCalls()).isEqualTo(1);
+        assertThat(result.metrics().concurrency()).isEqualTo(1);
+        assertThat(result.scope().get("items")).isEqualTo(java.util.List.of("Explain an LLM token."));
+        assertThat(result.output()).startsWith("1.").doesNotContain("2.", "trade-off", "give one metric");
+    }
+
+    @Test
+    void batchAcceptsSixItemsPreservingOrderAndIgnoringEmptySeparators() {
+        PatternRunResult result = runner.run(new PatternRunRequest(
+                "batching", "LLM routing;\nContext compression\n\nRetrieval grounding; ;Prompt caching;Tool calling;Batch throughput;\n"));
+        assertThat(result.metrics().modelCalls()).isEqualTo(6);
+        assertThat(result.metrics().concurrency()).isEqualTo(6);
+        assertThat(result.scope().get("items")).isEqualTo(java.util.List.of(
+                "LLM routing", "Context compression", "Retrieval grounding", "Prompt caching", "Tool calling", "Batch throughput"));
+        assertThat(result.output()).contains("1.", "2.", "3.", "4.", "5.", "6.");
+    }
+
+    @Test
+    void invalidBatchesAreRejectedBeforeModelsAreInitialized() {
+        ModelCatalog models = mock(ModelCatalog.class);
+        PatternRunner isolated = new PatternRunner(new PatternCatalog(), models);
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> isolated.run(new PatternRunRequest("batching", "one;two;three;four;five;six;seven")))
+                .withMessageContaining("at most six")
+                .withMessageContaining("no items were processed");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> isolated.run(new PatternRunRequest("batching", " ;\n;;  ")))
+                .withMessageContaining("at least one");
+        verifyNoInteractions(models);
     }
 
     /** Planning adds tokens to the turn it runs in, so no single-turn saving may be claimed. */

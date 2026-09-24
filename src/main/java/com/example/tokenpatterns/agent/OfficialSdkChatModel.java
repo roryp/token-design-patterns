@@ -1,5 +1,6 @@
 package com.example.tokenpatterns.agent;
 
+import com.example.tokenpatterns.domain.ModelOutputLimitException;
 import com.openai.client.OpenAIClient;
 import com.openai.errors.OpenAIServiceException;
 import com.openai.models.ResponseFormatText;
@@ -30,6 +31,8 @@ import dev.langchain4j.model.chat.request.DefaultChatRequestParameters;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.FinishReason;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
@@ -47,6 +50,7 @@ public final class OfficialSdkChatModel implements ChatModel {
 
     private static final String PROMPT_CACHE_KEY = "tokenflow-policy-v1";
     private static final int MAX_COMPLETION_TOKENS = 2000;
+    private static final Logger LOGGER = LoggerFactory.getLogger(OfficialSdkChatModel.class);
 
     private final OpenAIClient client;
     private final String deployment;
@@ -98,6 +102,7 @@ public final class OfficialSdkChatModel implements ChatModel {
             throw new HttpException(exception.statusCode(),
                     "Azure OpenAI request failed (HTTP " + exception.statusCode() + ")");
         } catch (RuntimeException exception) {
+            LOGGER.warn("Azure OpenAI request failed: errorType={}", exception.getClass().getSimpleName());
             throw new LangChain4jException("Azure OpenAI request could not be completed");
         }
         return fromSdkResponse(completion);
@@ -225,8 +230,7 @@ public final class OfficialSdkChatModel implements ChatModel {
             var choice = completion.choices().getFirst();
             FinishReason finishReason = switch (choice.finishReason().value()) {
                 case STOP -> FinishReason.STOP;
-                case LENGTH -> throw new LangChain4jException(
-                        "Azure OpenAI response was truncated because the completion token limit was reached");
+                case LENGTH -> throw new ModelOutputLimitException();
                 case CONTENT_FILTER -> throw new ContentFilteredException(
                         "Azure OpenAI blocked the response with its content filter");
                 default -> throw new LangChain4jException("Azure OpenAI returned an unsupported finish reason");
@@ -265,6 +269,7 @@ public final class OfficialSdkChatModel implements ChatModel {
         } catch (LangChain4jException exception) {
             throw exception;
         } catch (RuntimeException exception) {
+            LOGGER.warn("Azure OpenAI response validation failed: errorType={}", exception.getClass().getSimpleName());
             throw new LangChain4jException("Azure OpenAI returned invalid response data or token usage");
         }
     }

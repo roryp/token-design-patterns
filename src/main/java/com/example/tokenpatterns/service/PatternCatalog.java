@@ -242,12 +242,12 @@ public class PatternCatalog {
         return new PatternDefinition(
                 "batching", 8, "Batching", "batch", "Throughput first",
                 "Fan independent work out concurrently and amortize orchestration overhead.",
-                "A parallel mapper applies one stateless agent to each semicolon-separated item and aggregates the results.",
+                "A parallel mapper applies one stateless agent to each of one to six semicolon- or newline-separated items and aggregates the results.",
                 "LangChain4j parallelMapperBuilder coordinates the fan-out and preserves a single top-level execution trace.",
                 "Bulk classification, extraction, evaluation, and independent document processing.",
-                "Parallelism lowers wall time, not content tokens by itself. Bound concurrency and respect provider rate limits.",
+                "Parallelism lowers wall time, not content tokens by itself. One item means one call; more than six items are rejected, never silently dropped.",
                 "Wall time and throughput",
-                "Explain router patterns; Explain context compression; Explain caching",
+                "Explain routing requests between LLM models; Explain LLM context compression; Explain provider prompt caching",
                 List.of(
                         n("items", "Items", "3 independent tasks", "user", 7, 50),
                         n("mapper", "Mapper", "fan out", "batch", 31, 50),

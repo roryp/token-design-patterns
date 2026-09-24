@@ -64,6 +64,7 @@ public class PatternRunner {
 
     public PatternRunResult run(PatternRunRequest request) {
         PatternDefinition definition = catalog.get(request.patternId());
+        List<String> batchItems = "batching".equals(definition.id()) ? splitBatch(request.input()) : List.of();
         TraceCollector trace = new TraceCollector(definition);
         ModelSet models = trace.instrument(modelCatalog.models());
         long startedAt = System.nanoTime();
@@ -76,7 +77,7 @@ public class PatternRunner {
             case "tool-use" -> runToolUse(request.input(), models, trace);
             case "step-back" -> runStepBack(request.input(), models, trace);
             case "caching" -> runCaching(request.input(), request.providerCacheEnabled(), models, trace);
-            case "batching" -> runBatching(request.input(), models, trace);
+            case "batching" -> runBatching(batchItems, models, trace);
             default -> throw new IllegalArgumentException("Unsupported pattern: " + definition.id());
         };
 
@@ -250,8 +251,7 @@ public class PatternRunner {
         return invoke(workflow, Map.of("request", request));
     }
 
-    private RunOutcome runBatching(String request, ModelSet models, TraceCollector trace) {
-        List<String> items = splitBatch(request);
+    private RunOutcome runBatching(List<String> items, ModelSet models, TraceCollector trace) {
         BatchWorker worker = AgenticServices.agentBuilder(BatchWorker.class)
                 .chatModel(models.medium())
                 .build();
@@ -279,9 +279,14 @@ public class PatternRunner {
         List<String> items = java.util.Arrays.stream(request.split("[;\\n]+"))
                 .map(String::strip)
                 .filter(item -> !item.isBlank())
-                .limit(6)
                 .toList();
-        return items.size() > 1 ? items : List.of(request, request + " — show one trade-off", request + " — give one metric");
+        if (items.isEmpty()) {
+            throw new IllegalArgumentException("Enter at least one non-empty batch item, separated by semicolons or newlines.");
+        }
+        if (items.size() > 6) {
+            throw new IllegalArgumentException("A batch accepts at most six items. Split the request into smaller batches; no items were processed.");
+        }
+        return items;
     }
 
     private static int projectedBaseline(String patternId, int observed, RunOutcome outcome, String input) {

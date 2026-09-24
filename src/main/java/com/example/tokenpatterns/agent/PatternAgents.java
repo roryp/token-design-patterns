@@ -116,7 +116,10 @@ public final class PatternAgents {
 
         @UserMessage("""
                 [DEEP_REASONING]
-                Analyze the request carefully. State the decision frame, recommended next step, and validation criteria.
+                Provide a concise triage recommendation, not a complete solution.
+                Use at most 150 words, with one short paragraph each for Decision frame, Next step, and Validation.
+                Choose one recommended approach; cover the request's key constraints and one trade-off, and give a measurable validation metric.
+                Do not enumerate alternatives or implementation details.
                 REQUEST: {{request}}
                 """)
         @Agent(name = "Deep reasoning responder", description = "Escalates only complex work to a larger model", outputKey = "answer")

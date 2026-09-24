@@ -142,4 +142,33 @@ class PatternControllerTest {
                                 """))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void rejectsOversizedAndEmptyBatchesInsteadOfDroppingOrInventingItems() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"batching","input":"one;two;three;four;five;six;seven"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("at most six")));
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"batching","input":";; ;"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("at least one")));
+    }
+
+    @Test
+    void serializesExactlyOneCallForOneSubmittedBatchItem() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"batching","input":"Define an LLM token."}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metrics.modelCalls").value(1))
+                .andExpect(jsonPath("$.metrics.concurrency").value(1))
+                .andExpect(jsonPath("$.scope.items.length()").value(1))
+                .andExpect(jsonPath("$.scope.items[0]").value("Define an LLM token."));
+    }
 }
