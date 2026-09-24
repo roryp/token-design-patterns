@@ -3,6 +3,7 @@ package com.example.tokenpatterns.agent;
 import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.agentic.planner.AgentInstance;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.V;
 
 import java.util.ArrayList;
@@ -12,14 +13,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public final class PatternAgents {
-
-    public static final String CACHE_MISS = "__TOKEN_PATTERN_CACHE_MISS__";
 
     @FunctionalInterface
     public interface NonAiObserver {
@@ -302,37 +300,14 @@ public final class PatternAgents {
         String execute(@V("plan") String plan, @V("request") String request);
     }
 
-    public static final class CacheLookup {
-
-        private final ConcurrentMap<String, String> cache;
-        private final NonAiObserver observer;
-
-        public CacheLookup(ConcurrentMap<String, String> cache) {
-            this(cache, NonAiObserver.NOOP);
-        }
-
-        public CacheLookup(ConcurrentMap<String, String> cache, NonAiObserver observer) {
-            this.cache = cache;
-            this.observer = observer;
-        }
-
-        @Agent(name = "Cache lookup", description = "Returns an existing response without a model call", outputKey = "answer")
-        public String lookup(@V("request") String request) {
-            long startedAt = System.nanoTime();
-            String result = cache.getOrDefault(cacheKey(request), CACHE_MISS);
-            observer.completed("Cache lookup", request, CACHE_MISS.equals(result) ? "MISS" : "HIT", elapsedMillis(startedAt));
-            return result;
-        }
-    }
-
     public interface CacheableAnswerer {
 
+        @SystemMessage(fromResource = "/prompts/cache-policy.txt")
         @UserMessage("""
                 [CACHEABLE_ANSWER]
-                Give a stable, concise definition suitable for exact caching.
                 REQUEST: {{request}}
                 """)
-        @Agent(name = "Cache answerer", description = "Generates only when the cache misses", outputKey = "answer")
+        @Agent(name = "Cache answerer", description = "Generates a fresh answer with a reusable provider-cached prefix", outputKey = "answer")
         String answer(@V("request") String request);
     }
 
@@ -351,10 +326,6 @@ public final class PatternAgents {
 
         @Agent(name = "Batch mapper", description = "Fans a collection out over stateless workers")
         List<String> process(@V("items") List<String> items);
-    }
-
-    public static String cacheKey(String request) {
-        return request.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").strip();
     }
 
     private static long elapsedMillis(long startedAtNanos) {

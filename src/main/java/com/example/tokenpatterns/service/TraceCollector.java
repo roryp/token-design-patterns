@@ -2,6 +2,7 @@ package com.example.tokenpatterns.service;
 
 import com.example.tokenpatterns.agent.ModelCatalog.ModelSet;
 import com.example.tokenpatterns.agent.PatternAgents.NonAiObserver;
+import com.example.tokenpatterns.agent.ProviderTokenUsage;
 import com.example.tokenpatterns.domain.PatternDefinition;
 import com.example.tokenpatterns.domain.PatternRunResult.TraceEvent;
 import dev.langchain4j.agentic.observability.AgentInvocationError;
@@ -27,11 +28,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 public final class TraceCollector implements AgentListener, NonAiObserver {
 
     private static final Set<String> NON_AI_AGENTS = Set.of(
-            "Triage gate", "Knowledge retriever", "Cost calculator", "Cache lookup");
+            "Triage gate", "Knowledge retriever", "Cost calculator");
 
     private final PatternDefinition definition;
     private final AtomicInteger sequence = new AtomicInteger();
@@ -48,6 +50,7 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
                 instrument(models.small()),
                 instrument(models.medium()),
                 instrument(models.large()),
+                instrument(models.cachedMedium()),
                 models.label());
     }
 
@@ -71,6 +74,7 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
         TokenUsage usage = chatResponse == null ? null : chatResponse.tokenUsage();
         int inputTokens = usage == null || usage.inputTokenCount() == null ? 0 : usage.inputTokenCount();
         int outputTokens = usage == null || usage.outputTokenCount() == null ? 0 : usage.outputTokenCount();
+        ProviderTokenUsage providerUsage = usage instanceof ProviderTokenUsage details ? details : null;
         String model = chatResponse == null || chatResponse.modelName() == null
                 ? ""
                 : chatResponse.modelName();
@@ -84,6 +88,9 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
                 elapsedMillis(span.startedAtNanos()),
                 inputTokens,
                 outputTokens,
+                providerUsage == null ? null : providerUsage.cachedInputTokens(),
+                providerUsage == null ? null : providerUsage.cacheWriteTokens(),
+                providerUsage == null ? null : providerUsage.reasoningTokens(),
                 span.inputPreview(),
                 preview(response.output()),
                 "completed"));
@@ -101,6 +108,9 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
                 elapsedMillis(span.startedAtNanos()),
                 0,
                 0,
+                null,
+                null,
+                null,
                 span.inputPreview(),
                 preview(error.error().getMessage()),
                 "failed"));
@@ -121,6 +131,55 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
 
     public int observedTokens() {
         return events().stream().mapToInt(event -> event.inputTokens() + event.outputTokens()).sum();
+    }
+
+    public int inputTokens() {
+        return events().stream().mapToInt(TraceEvent::inputTokens).sum();
+    }
+
+    public int outputTokens() {
+        return events().stream().mapToInt(TraceEvent::outputTokens).sum();
+    }
+
+    public Integer cachedInputTokens() {
+        return sumProviderUsage(TraceEvent::cachedInputTokens);
+    }
+
+    public Integer cacheWriteTokens() {
+        return sumProviderUsage(TraceEvent::cacheWriteTokens);
+    }
+
+    public Integer reasoningTokens() {
+        return sumProviderUsage(TraceEvent::reasoningTokens);
+    }
+
+    public String cacheStatus(boolean enabled) {
+        Integer cached = cachedInputTokens();
+        Integer written = cacheWriteTokens();
+        if (cached != null && cached > 0) {
+            return "hit";
+        }
+        if (cached == null || written == null) {
+            return "unknown";
+        }
+        if (written > 0) {
+            return "miss-written";
+        }
+        return enabled ? "miss" : "bypassed";
+    }
+
+    private Integer sumProviderUsage(Function<TraceEvent, Integer> counter) {
+        int total = 0;
+        for (TraceEvent event : events()) {
+            if ("model".equals(event.kind())) {
+                Integer value = counter.apply(event);
+                if (value == null) {
+                    return null;
+                }
+                total = Math.addExact(total, value);
+            }
+        }
+        return total;
     }
 
     public int modelCalls() {
@@ -145,6 +204,9 @@ public final class TraceCollector implements AgentListener, NonAiObserver {
                 durationMs,
                 0,
                 0,
+                null,
+                null,
+                null,
                 preview(input),
                 preview(output),
                 "completed"));

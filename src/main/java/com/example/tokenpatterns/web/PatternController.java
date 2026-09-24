@@ -57,9 +57,13 @@ public class PatternController {
     }
 
     @DeleteMapping("/cache")
-    public Map<String, String> clearCache() {
-        runner.clearCache();
-        return Map.of("status", "cleared");
+    public ProblemDetail clearCache() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.GONE,
+                "The local response cache has been removed. Azure manages prompt-cache retention; this application cannot clear it. Send cacheEnabled=false to bypass provider caching for a run.");
+        problem.setTitle("Provider cache is service-managed");
+        problem.setType(URI.create("https://example.com/problems/provider-cache"));
+        return problem;
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})

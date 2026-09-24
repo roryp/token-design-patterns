@@ -672,12 +672,39 @@
       background: var(--cp-surface-soft);
     }
 
-    .cache-reset {
+    .cache-control {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--cp-text-muted);
+    }
+
+    .cache-control.visible {
+      display: flex;
+    }
+
+    .cache-control input {
+      accent-color: var(--cp-accent);
+    }
+
+    .cache-receipt {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid var(--cp-border);
+      border-radius: 10px;
+      background: var(--cp-surface-soft);
+      font-size: 0.79rem;
+      overflow-wrap: anywhere;
+    }
+
+    .cache-receipt[hidden] {
       display: none;
     }
 
-    .cache-reset.visible {
-      display: inline-flex;
+    .cache-receipt p {
+      margin: 6px 0 0;
+      color: var(--cp-text-muted);
     }
 
     .run-note {
@@ -1340,13 +1367,13 @@
         <article class="metric-card savings-card card">
           <div class="savings-gauge" id="savingsGauge"><strong id="savingsValue">—</strong></div>
           <div class="metric-copy">
-            <span class="metric-label">Projected saving</span>
+            <span class="metric-label" id="savingsLabel">Projected saving</span>
             <span class="metric-foot" id="savingsFoot">not run yet</span>
           </div>
         </article>
         <article class="metric-card card">
           <div class="metric-copy">
-            <span class="metric-label">Modeled baseline</span>
+            <span class="metric-label" id="baselineLabel">Modeled baseline</span>
             <strong class="metric-value" id="baselineValue">—</strong>
           </div>
         </article>
@@ -1387,9 +1414,17 @@
             <textarea id="promptInput" maxlength="12000" spellcheck="true"></textarea>
             <div class="runner-actions">
               <button class="primary-button" id="runButton" type="button">Run pattern</button>
-              <button class="secondary-button cache-reset" id="clearCacheButton" type="button">Clear cache</button>
+              <label class="cache-control" id="cacheControl">
+                <input id="cacheEnabled" type="checkbox" checked />
+                Use provider prompt cache
+              </label>
             </div>
             <div class="run-note" id="runNote">Each run executes the real LangChain4j Agentic workflow.</div>
+            <div class="cache-receipt" id="cacheReceipt" role="status" hidden>
+              <strong id="cacheStatus">Awaiting provider usage</strong>
+              <p id="cacheUsage"></p>
+              <p>Reused input is still counted in observed tokens. Every run generates a new answer.</p>
+            </div>
           </div>
         </section>
 
@@ -1482,7 +1517,11 @@
       promptInput: $("#promptInput"),
       charCount: $("#charCount"),
       runButton: $("#runButton"),
-      clearCacheButton: $("#clearCacheButton"),
+      cacheControl: $("#cacheControl"),
+      cacheEnabled: $("#cacheEnabled"),
+      cacheReceipt: $("#cacheReceipt"),
+      cacheStatus: $("#cacheStatus"),
+      cacheUsage: $("#cacheUsage"),
       modelSummary: $("#modelSummary"),
       runNote: $("#runNote"),
       answerBody: $("#answerBody"),
@@ -1490,7 +1529,9 @@
       errorBanner: $("#errorBanner"),
       savingsGauge: $("#savingsGauge"),
       savingsValue: $("#savingsValue"),
+      savingsLabel: $("#savingsLabel"),
       savingsFoot: $("#savingsFoot"),
+      baselineLabel: $("#baselineLabel"),
       baselineValue: $("#baselineValue"),
       observedValue: $("#observedValue"),
       durationValue: $("#durationValue"),
@@ -1581,9 +1622,13 @@
       elements.promptInput.value = pattern.sampleInput;
       updateCharCount();
       elements.runButton.textContent = `Run ${pattern.name}`;
-      elements.clearCacheButton.classList.toggle("visible", pattern.id === "caching");
+      elements.cacheControl.classList.toggle("visible", pattern.id === "caching");
+      elements.cacheEnabled.checked = true;
+      elements.cacheEnabled.disabled = false;
+      elements.savingsLabel.textContent = pattern.id === "caching" ? "Input reused" : "Projected saving";
+      elements.baselineLabel.textContent = pattern.id === "caching" ? "Cache writes" : "Modeled baseline";
       elements.runNote.textContent = pattern.id === "caching"
-        ? "Run the same prompt twice: the second run should hit the cache."
+        ? "Every run calls Azure. Repeat to test prefix reuse, or uncheck caching to bypass it. Hits are not guaranteed; Azure manages retention."
         : pattern.id === "batching"
           ? "Semicolon-separate up to six independent items."
           : "Each run executes the real LangChain4j Agentic workflow.";
@@ -1718,6 +1763,7 @@
       elements.takeawayList.replaceChildren(createElement("li", "", "Run to populate evidence."));
       elements.scopeSection.classList.remove("visible");
       elements.scopeList.replaceChildren();
+      elements.cacheReceipt.hidden = true;
     }
 
     function emptyAnswer() {
@@ -1742,12 +1788,13 @@
     }
 
     async function runCurrentPattern() {
-      if (!state.current || !state.config?.modelsConfigured || !elements.promptInput.value.trim()) return;
+      if (!state.current || elements.runButton.disabled || !state.config?.modelsConfigured || !elements.promptInput.value.trim()) return;
       hideError();
       state.animationToken += 1;
       const runToken = state.animationToken;
       setRunning(true);
       resetGraphState();
+      elements.cacheReceipt.hidden = true;
       elements.answerSubtitle.textContent = "Running…";
       const loading = createElement("div", "answer-loading");
       const loadingInner = createElement("div");
@@ -1763,7 +1810,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patternId: state.current.id,
-            input: elements.promptInput.value.trim()
+            input: elements.promptInput.value.trim(),
+            ...(state.current.id === "caching" ? { cacheEnabled: elements.cacheEnabled.checked } : {})
           })
         });
         const payload = await response.json();
@@ -1786,6 +1834,7 @@
       elements.runButton.disabled = running;
       elements.runButton.textContent = running ? "Running…" : `Run ${state.current?.name || "pattern"}`;
       elements.promptInput.disabled = running;
+      elements.cacheEnabled.disabled = running;
     }
 
     const blockStart = /^(```|#{1,6}\s|[-*•]\s|\d+[.)]\s|>\s?|(---|\*\*\*)\s*$)/;
@@ -1934,30 +1983,58 @@
       output.append(renderMarkdown(result.output));
       const meta = createElement("div", "answer-meta");
       meta.append(createElement("span", "mini-badge", `${result.metrics.modelCalls} model call${result.metrics.modelCalls === 1 ? "" : "s"}`));
-      if (result.metrics.cacheHit) meta.append(createElement("span", "mini-badge", "CACHE HIT"));
+      if (result.patternId === "caching") {
+        meta.append(createElement("span", "mini-badge", cacheStatusLabel(result.metrics.cacheStatus)));
+      }
       const wrapper = document.createDocumentFragment();
       wrapper.append(output, meta);
       elements.answerBody.replaceChildren(wrapper);
       elements.answerSubtitle.textContent = `Completed · ${new Date(result.completedAt).toLocaleTimeString()}`;
 
-      renderMetrics(result.metrics);
+      renderMetrics(result.metrics, result.patternId === "caching");
       renderTrace(result.trace);
       renderTakeaways(result.takeaways);
       renderScope(result.scope);
     }
 
-    function renderMetrics(metrics) {
-      const percent = Math.max(0, Math.min(100, metrics.projectedSavingsPercent));
+    function cacheStatusLabel(status) {
+      return {
+        hit: "Provider cache hit",
+        "miss-written": "Provider miss / written",
+        miss: "Provider cache miss",
+        bypassed: "Provider cache bypassed",
+        unknown: "Cache telemetry unavailable"
+      }[status] || "Cache telemetry unavailable";
+    }
+
+    function providerCount(value) {
+      return value == null ? "unknown" : formatNumber(value);
+    }
+
+    function renderMetrics(metrics, caching) {
+      const measuredPercent = metrics.cachedInputTokens == null ? null
+        : metrics.inputTokens > 0 ? Math.round(metrics.cachedInputTokens * 100 / metrics.inputTokens) : 0;
+      const percent = Math.max(0, Math.min(100, (caching ? measuredPercent : metrics.projectedSavingsPercent) ?? 0));
       elements.savingsGauge.style.setProperty("--progress", `${percent * 3.6}deg`);
-      elements.savingsValue.textContent = `${percent}%`;
-      elements.savingsFoot.textContent = metrics.cacheHit ? "cache hit" : `${formatNumber(metrics.avoidedTokens)} tokens avoided`;
-      elements.baselineValue.textContent = formatNumber(metrics.projectedBaselineTokens);
+      elements.savingsValue.textContent = caching && measuredPercent == null ? "—" : `${percent}%`;
+      elements.savingsFoot.textContent = caching
+        ? `${providerCount(metrics.cachedInputTokens)} of ${formatNumber(metrics.inputTokens)} input tokens`
+        : `${formatNumber(metrics.avoidedTokens)} tokens avoided`;
+      elements.baselineValue.textContent = caching ? providerCount(metrics.cacheWriteTokens) : formatNumber(metrics.projectedBaselineTokens);
       elements.observedValue.textContent = formatNumber(metrics.observedTokens);
       elements.durationValue.textContent = `${formatNumber(metrics.durationMs)}ms`;
       elements.stepsValue.textContent = formatNumber(metrics.orchestrationSteps);
       elements.callsFoot.textContent = `${metrics.modelCalls} model call${metrics.modelCalls === 1 ? "" : "s"}`;
       elements.concurrencyFoot.textContent = metrics.concurrency > 1 ? `${metrics.concurrency} concurrent items` : "end to end";
       elements.savingsGauge.title = metrics.basis;
+      elements.cacheReceipt.hidden = !caching;
+      if (caching) {
+        elements.cacheStatus.textContent = cacheStatusLabel(metrics.cacheStatus);
+        elements.cacheUsage.textContent =
+          `${formatNumber(metrics.inputTokens)} input · ${formatNumber(metrics.outputTokens)} output · `
+          + `${providerCount(metrics.cachedInputTokens)} reused · ${providerCount(metrics.cacheWriteTokens)} written · `
+          + `${providerCount(metrics.reasoningTokens)} reasoning (included in output).`;
+      }
     }
 
     function renderTrace(trace) {
@@ -1971,6 +2048,11 @@
         const agent = createElement("div", "trace-agent");
         agent.append(createElement("strong", "", event.agent));
         agent.append(createElement("small", "", event.model || event.kind));
+        if (event.kind === "model") {
+          agent.title = `${event.inputTokens} input, ${event.outputTokens} output; `
+            + `${providerCount(event.cachedInputTokens)} cached reads, ${providerCount(event.cacheWriteTokens)} cache writes; `
+            + `${providerCount(event.reasoningTokens)} reasoning tokens (included in output)`;
+        }
         item.append(agent);
 
         item.append(createElement("span", "trace-preview", plainText(event.outputPreview || event.inputPreview) || "No payload"));
@@ -2090,18 +2172,6 @@
       return text.length <= 28 ? text : `${text.slice(0, 27)}…`;
     }
 
-    async function clearCache() {
-      try {
-        const response = await fetch("/api/cache", { method: "DELETE" });
-        if (!response.ok) throw new Error("The cache could not be cleared.");
-        elements.runNote.textContent = "Cache cleared. The next run takes the miss path.";
-        resetRunPanels();
-        renderFlow(state.current);
-      } catch (error) {
-        showError(error.message);
-      }
-    }
-
     function updateCharCount() {
       elements.charCount.textContent = `${formatNumber(elements.promptInput.value.length)} / 12,000`;
     }
@@ -2129,7 +2199,6 @@
     }
 
     elements.runButton.addEventListener("click", runCurrentPattern);
-    elements.clearCacheButton.addEventListener("click", clearCache);
     elements.promptInput.addEventListener("input", updateCharCount);
     elements.promptInput.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") runCurrentPattern();

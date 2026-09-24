@@ -1,7 +1,5 @@
 package com.example.tokenpatterns;
 
-import com.example.tokenpatterns.service.PatternRunner;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -11,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,14 +21,6 @@ class PatternControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    private PatternRunner runner;
-
-    @BeforeEach
-    void resetCache() {
-        runner.clearCache();
-    }
 
     @Test
     void returnsThePatternCatalog() throws Exception {
@@ -82,5 +73,61 @@ class PatternControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Pattern run could not be started"));
+    }
+
+    @Test
+    void serializesProviderCacheUsageAndAllowsAnExplicitBypass() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"caching","input":"What is idempotency?","cacheEnabled":false}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metrics.cacheStatus").value("bypassed"))
+                .andExpect(jsonPath("$.metrics.cachedInputTokens").value(0))
+                .andExpect(jsonPath("$.metrics.cacheWriteTokens").value(0))
+                .andExpect(jsonPath("$.metrics.modelCalls").value(1))
+                .andExpect(jsonPath("$.metrics.avoidedTokens").value(0))
+                .andExpect(jsonPath("$.metrics.cacheHit").doesNotExist());
+    }
+
+    @Test
+    void defaultCacheRequestReportsProviderWriteAndNullUsageRemainsNull() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"caching","input":"What is idempotency?"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metrics.cacheStatus").value("miss-written"))
+                .andExpect(jsonPath("$.metrics.cacheWriteTokens").value(org.hamcrest.Matchers.greaterThan(0)));
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"caching","input":"What is idempotency? CACHE_UNKNOWN_FIXTURE"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metrics.cacheStatus").value("unknown"))
+                .andExpect(jsonPath("$.metrics.cachedInputTokens").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.metrics.cacheWriteTokens").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void doesNotPretendToClearAServiceManagedCache() throws Exception {
+        mockMvc.perform(delete("/api/cache"))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.title").value("Provider cache is service-managed"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("cacheEnabled=false")));
+    }
+
+    @Test
+    void rejectsEmptyCacheInputAndMalformedCacheOptions() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"caching","input":""}
+                                """))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"caching","input":"What is idempotency?","cacheEnabled":{}}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 }

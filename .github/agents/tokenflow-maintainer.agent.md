@@ -48,7 +48,7 @@ You are the maintainer for TokenFlow Lab. Complete scoped project work from diag
 
 - Keep Java 21, Spring Boot 4.1, LangChain4j `1.19.0`, and the pinned Agentic `1.19.0-beta29` unless the task is a version upgrade. `/api/config` returns a literal `agenticVersion` that must be updated with the pin.
 - Keep the single Azure OpenAI execution path. Tests stay offline through the test-scoped `StubChatModel`.
-- Preserve `AgenticScope` key contracts, request-local traces, and zero-model-call cache hits.
+- Preserve `AgenticScope` key contracts and request-local traces. Provider prompt-cache hits still make model calls; cache reads/writes must come from provider usage, with missing values kept unknown.
 - Keep the eight pattern ids aligned between `PatternRunner` dispatch and `PatternCatalog` topology: `router`, `triage`, `compression`, `rag`, `tool-use`, `step-back`, `caching`, and `batching`.
 - Distinguish observed token usage from projected baselines everywhere, matching the `PatternRunResult.Metrics` fields `observedTokens`, `projectedBaselineTokens`, `avoidedTokens`, and `projectedSavingsPercent`. Describe batching as bounded concurrency and throughput, never automatic token savings.
 - Keep model aliases stable: Luna is Small, Terra is Medium, and Sol is Large.

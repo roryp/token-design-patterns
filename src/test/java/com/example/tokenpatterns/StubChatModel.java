@@ -1,5 +1,6 @@
 package com.example.tokenpatterns;
 
+import com.example.tokenpatterns.agent.ProviderTokenUsage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -20,11 +21,20 @@ public final class StubChatModel implements ChatModel {
 
     /** Prompts containing this marker make the stub fail the way a throttled provider does. */
     public static final String RATE_LIMIT_TRIGGER = "TRIGGER_RATE_LIMIT";
+    public static final String CACHE_HIT_FIXTURE = "CACHE_HIT_FIXTURE";
+    public static final String CACHE_UNKNOWN_FIXTURE = "CACHE_UNKNOWN_FIXTURE";
+    public static final String CACHE_WRITE_UNKNOWN_FIXTURE = "CACHE_WRITE_UNKNOWN_FIXTURE";
 
     private final String modelName;
+    private final boolean cacheEnabled;
 
     public StubChatModel(String modelName) {
+        this(modelName, false);
+    }
+
+    public StubChatModel(String modelName, boolean cacheEnabled) {
         this.modelName = modelName;
+        this.cacheEnabled = cacheEnabled;
     }
 
     @Override
@@ -40,11 +50,23 @@ public final class StubChatModel implements ChatModel {
         String response = respond(prompt);
         int inputTokens = estimateTokens(prompt);
         int outputTokens = estimateTokens(response);
+        boolean hit = cacheEnabled && prompt.contains(CACHE_HIT_FIXTURE);
+        int prefixTokens = cacheEnabled ? request.messages().stream()
+                .filter(SystemMessage.class::isInstance)
+                .map(SystemMessage.class::cast)
+                .mapToInt(message -> estimateTokens(message.text()))
+                .sum() : 0;
+        TokenUsage usage = prompt.contains(CACHE_UNKNOWN_FIXTURE)
+                ? new TokenUsage(inputTokens, outputTokens)
+                : new ProviderTokenUsage(inputTokens, outputTokens, inputTokens + outputTokens,
+                        hit ? prefixTokens : 0,
+                        prompt.contains(CACHE_WRITE_UNKNOWN_FIXTURE) ? null : hit ? 0 : prefixTokens,
+                        0);
 
         return ChatResponse.builder()
                 .aiMessage(AiMessage.from(response))
                 .modelName(modelName)
-                .tokenUsage(new TokenUsage(inputTokens, outputTokens))
+                .tokenUsage(usage)
                 .finishReason(FinishReason.STOP)
                 .build();
     }

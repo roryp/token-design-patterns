@@ -21,6 +21,7 @@ public class StubModelConfiguration {
                         new StubChatModel("stub-small"),
                         new StubChatModel("stub-medium"),
                         new StubChatModel("stub-large"),
+                        new StubChatModel("stub-medium", true),
                         "Stub models");
             }
 

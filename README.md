@@ -59,10 +59,12 @@ The UI makes the trade-offs visible:
 | 4 | RAG | Non-AI retriever + grounded generator | Retrieve relevant chunks instead of sending the corpus | Retrieval recall and groundedness |
 | 5 | Tool use | Deterministic calculator + explainer | Keep exact computation outside the model | Tool correctness and failure handling |
 | 6 | Step-back planning | Planner + executor sequence | Reduce wandering and costly retries | Rework avoided and completion rate |
-| 7 | Caching | Lookup agent + conditional miss path | A cache hit makes zero model calls | Hit rate, freshness, and tenant isolation |
+| 7 | Caching | Agentic answerer + official OpenAI Java SDK | Reuse a stable prompt prefix; every run still calls the model | Provider cache reads, writes, bypass, and answer quality |
 | 8 | Batching | `parallelMapperBuilder()` | Improve throughput with bounded concurrency | Wall time, throughput, and throttling |
 
 Batching does **not** inherently reduce content tokens, and step-back planning *adds* tokens to the turn it runs in. The lab reports both as zero-saving patterns and measures them by throughput and rework avoided instead.
+
+Provider prompt caching also reports zero content-token avoidance. Cached input remains part of observed usage; reuse affects input-processing work and pricing, not whether an answer is generated.
 
 ## Quick start
 
@@ -102,6 +104,8 @@ The lab uses three Azure OpenAI deployments as explicit cost/capability tiers:
 
 The deployed Container App authenticates with a user-assigned managed identity. No Azure OpenAI key is stored in Bicep, Container Apps, or the browser.
 
+Model calls use the official `com.openai:openai-java` SDK against Azure's `/openai/v1/` endpoint, behind a text `ChatModel` adapter. LangChain4j Agentic still orchestrates the workflows. The legacy LangChain4j Azure adapter is not used: it discarded provider cache details. Managed identity uses a refreshing bearer-token supplier rather than a token captured at startup.
+
 For local testing, grant the signed-in developer `Cognitive Services OpenAI User`, sign in with Azure CLI, and set:
 
 ```powershell
@@ -126,7 +130,7 @@ A suggested 25–35 minute session:
 4. **RAG** — compare two retrieved chunks with the complete local corpus.
 5. **Tool use** — show that Java performs exact arithmetic while the model only explains the verified result.
 6. **Step-back planning** — discuss paying for a short plan to avoid expensive retries and option churn.
-7. **Caching** — run the exact prompt twice. The second run should report a cache hit and zero model calls.
+7. **Caching** — leave **Use provider prompt cache** checked and run twice. Both runs call Terra and generate fresh answers. Inspect the provider receipt for cache writes and cache reads; a second-call hit is not guaranteed. Uncheck the option and run again to verify bypass without clearing the service-managed cache.
 8. **Batching** — send three semicolon-separated requests. Compare elapsed time with token count and reinforce that concurrency is not token reduction.
 9. **Challenge the baseline** — replace every projection with provider telemetry and production quality measurements.
 
@@ -353,7 +357,10 @@ Review the target subscription and environment before running this destructive c
 - **Observed tokens** are read from each `ChatResponse` using Azure OpenAI response usage.
 - **Modeled baseline** is the projected cost of an equivalent monolithic large-model or repeated full-context path. It is not provider billing data.
 - **Avoided tokens** equal the modeled baseline minus observed tokens.
-- **Caching** claims no savings on the first miss and 100% model-token avoidance only on an exact hit.
+- **Caching** uses a useful shared reliability policy of more than 1,024 tokens followed by the current question. Only the system prefix has an explicit cache breakpoint; a stable versioned cache key helps routing. The API receives `cachedInputTokens`, `cacheWriteTokens`, and `reasoningTokens` from provider usage. Missing optional fields are `null` (unknown), not invented zeros.
+- **Cache status** is `hit` when the provider reports reused input, `miss-written` when it reports writes without reads, `miss` when both counts are zero with caching enabled, `bypassed` when both are zero with caching disabled, or `unknown` when evidence is incomplete. A hit can also include writes.
+- **No answer cache** remains. Every caching run calls the provider. Cached reads and writes are subsets of input, and reasoning is a subset of output; these counts are not added twice or subtracted from observed usage. The caching baseline equals observed usage, so avoided tokens and projected savings stay zero. The UI's **Input reused** percentage is cached input divided by observed input, not a price discount.
+- **Cache cost and retention** are service-managed. Cache writes can carry a premium, so the lab does not invent a dollar saving. Enabling caching does not guarantee a hit. Disabling it sends explicit mode without a breakpoint; it bypasses caching rather than invalidating prior entries. Other patterns explicitly bypass caching so their measurements do not depend on hidden cache reuse.
 - **Batching** reports zero content-token savings. Its primary measurements are elapsed time and concurrency.
 - **Tool use** may improve correctness and auditability even when immediate token savings are modest.
 - **Step-back planning** reports zero single-turn savings because planning *adds* tokens to the current request. Its projected baseline equals observed usage, and the run reports the measured plan size against the answer it framed. Judge it by retries and rework avoided across turns.
@@ -367,9 +374,11 @@ For production decisions, pair token telemetry with task success, latency, routi
 | `GET` | `/api/patterns` | Pattern descriptions and graph definitions |
 | `GET` | `/api/config` | Runtime capabilities and model names; never returns secrets |
 | `POST` | `/api/runs` | Execute one pattern |
-| `DELETE` | `/api/cache` | Clear the in-memory workshop response cache |
+| `DELETE` | `/api/cache` | Retired: returns `410 Gone`; Azure's prompt cache cannot be cleared by this application |
 
 `POST /api/runs` returns `400` for an unknown pattern or empty input, `429` when Azure OpenAI throttles the run, and `502` when the model provider fails for another reason. All failures use `ProblemDetail`.
+
+For `patternId: "caching"`, optional `cacheEnabled` defaults to `true`; send `false` to bypass cache reads and writes on that call. The flag does not enable caching on other patterns. The former local `metrics.cacheHit` boolean was removed; clients should use the provider-derived `metrics.cacheStatus`. Aggregate metrics now include input/output counts and nullable provider cache/reasoning counts. Each model trace span carries the same provider detail fields.
 
 Example request:
 
@@ -394,6 +403,16 @@ Invoke-RestMethod `
   -Method Post `
   -ContentType "application/json" `
   -Body $body
+```
+
+Provider-cache request:
+
+```json
+{
+  "patternId": "caching",
+  "input": "What is idempotency and why does it matter for retries?",
+  "cacheEnabled": true
+}
 ```
 
 ## Project layout
@@ -435,9 +454,29 @@ Run a clean package build before deployment:
 .\mvnw.cmd clean package
 ```
 
-The test suite executes all eight workflows against a deterministic stub `ChatModel`, validates the API, confirms that a repeated cache request makes zero model calls, and checks parallel mapper fan-out. Tests never require Azure or network access.
+The test suite executes all eight workflows against a deterministic stub `ChatModel`, validates the API, confirms that repeated caching runs still make model calls, checks cache-read/write/unknown fixtures, and checks parallel mapper fan-out. Official SDK request and response mapping is tested without Azure, network access, or model credentials. The test fixtures are not a production simulation mode.
+
+### Live provider verification
+
+The following smoke test makes **paid, real model calls** against a running application. It checks a cache-enabled run, up to six attempts to observe a genuine provider read, a cache-bypassed run, consistent usage, and useful idempotency answers. It fails if no real read is observed or if bypass reports reads or writes. A pre-warmed prefix can hit immediately; the test never fabricates a cold start or claims to clear Azure's cache. `-AllPatterns` additionally validates every other workflow.
+
+```powershell
+.\scripts\Test-ProviderCaching.ps1 -BaseUrl http://localhost:8080 -AllPatterns
+
+# After local validation, preview infrastructure before deploying.
+azd provision --preview --environment dev --no-prompt
+azd up --environment dev --no-prompt
+$settings = azd env get-values --output json | ConvertFrom-Json
+.\scripts\Test-ProviderCaching.ps1 -BaseUrl $settings.AZURE_CONTAINER_APP_URL -AllPatterns
+```
+
+Also verify the Caching screen at desktop and mobile widths: the toggle must affect the request, the receipt must match API usage, and no cache hit may claim zero model calls. Provider usage and output vary between real runs.
 
 ## Troubleshooting
+
+### Deployment succeeds but the site returns "Container App - Unavailable"
+
+Check the app-level `properties.runningStatus`, not just revision health. `azd up` can deploy a healthy revision while preserving an explicitly stopped application. Starting the app is separate from scaling an idle app to zero. With authorization to resume service, use the documented [Container Apps start operation](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/container-apps/start?view=rest-resource-manager-containerapps-2025-07-01); older Azure CLI extensions may not expose an app-level start command. Keep the existing scale settings and wait for `/api/config` readiness before testing. Do not work around a stopped app by raising minimum replicas or activating an old revision.
 
 ### The run button is disabled
 
@@ -483,7 +522,7 @@ This template creates a consumption-only environment. Do not set a workload prof
 
 ### Remote ACR build differs from a local Maven build
 
-The remote builder starts from an empty dependency cache and reveals missing optional dependencies. Keep `azure-identity` explicit because it is optional in the LangChain4j Azure OpenAI module but required by `DefaultAzureCredential`.
+The remote builder starts from an empty dependency cache and reveals missing dependencies. Keep `azure-identity` explicit because the official OpenAI SDK's bearer-token integration uses `DefaultAzureCredential`.
 
 ### An error includes both a Client Request ID and GH Request ID
 
@@ -503,6 +542,7 @@ That response is from the GitHub Copilot request layer, not the TokenFlow Contai
 - Spring Boot 4.1.0
 - LangChain4j 1.19.0
 - LangChain4j Agentic 1.19.0-beta29
+- Official OpenAI Java SDK 4.63.1
 - GPT-5.6 model version 2026-07-09
 
 The Agentic module is experimental and can change between releases. Keep it pinned and rerun the full test suite during upgrades.

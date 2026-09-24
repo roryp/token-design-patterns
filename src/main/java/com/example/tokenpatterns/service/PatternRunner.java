@@ -5,7 +5,6 @@ import com.example.tokenpatterns.agent.ModelCatalog.ModelSet;
 import com.example.tokenpatterns.agent.PatternAgents.ArchitectureSpecialist;
 import com.example.tokenpatterns.agent.PatternAgents.BatchWorker;
 import com.example.tokenpatterns.agent.PatternAgents.BatchWorkflow;
-import com.example.tokenpatterns.agent.PatternAgents.CacheLookup;
 import com.example.tokenpatterns.agent.PatternAgents.CacheableAnswerer;
 import com.example.tokenpatterns.agent.PatternAgents.CodeSpecialist;
 import com.example.tokenpatterns.agent.PatternAgents.ContextCompressor;
@@ -36,14 +35,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
-
-import static com.example.tokenpatterns.agent.PatternAgents.CACHE_MISS;
-import static com.example.tokenpatterns.agent.PatternAgents.cacheKey;
 
 @Service
 public class PatternRunner {
@@ -61,7 +55,6 @@ public class PatternRunner {
 
     private final PatternCatalog catalog;
     private final ModelCatalog modelCatalog;
-    private final ConcurrentMap<String, String> responseCache = new ConcurrentHashMap<>();
     private final ExecutorService batchExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     public PatternRunner(PatternCatalog catalog, ModelCatalog modelCatalog) {
@@ -82,7 +75,7 @@ public class PatternRunner {
             case "rag" -> runRag(request.input(), models, trace);
             case "tool-use" -> runToolUse(request.input(), models, trace);
             case "step-back" -> runStepBack(request.input(), models, trace);
-            case "caching" -> runCaching(request.input(), models, trace);
+            case "caching" -> runCaching(request.input(), request.providerCacheEnabled(), models, trace);
             case "batching" -> runBatching(request.input(), models, trace);
             default -> throw new IllegalArgumentException("Unsupported pattern: " + definition.id());
         };
@@ -92,6 +85,7 @@ public class PatternRunner {
         int baselineTokens = projectedBaseline(definition.id(), observedTokens, outcome, request.input());
         int avoidedTokens = Math.max(0, baselineTokens - observedTokens);
         int savingsPercent = baselineTokens == 0 ? 0 : (int) Math.round(avoidedTokens * 100.0 / baselineTokens);
+        String cacheStatus = trace.cacheStatus("caching".equals(definition.id()) && request.providerCacheEnabled());
 
         Metrics metrics = new Metrics(
                 baselineTokens,
@@ -101,9 +95,14 @@ public class PatternRunner {
                 trace.modelCalls(),
                 trace.events().size(),
                 durationMs,
-                outcome.cacheHit(),
                 outcome.concurrency(),
-                measurementBasis(definition.id(), outcome.cacheHit()));
+                trace.inputTokens(),
+                trace.outputTokens(),
+                trace.cachedInputTokens(),
+                trace.cacheWriteTokens(),
+                trace.reasoningTokens(),
+                cacheStatus,
+                measurementBasis(definition.id()));
 
         return new PatternRunResult(
                 UUID.randomUUID().toString(),
@@ -112,12 +111,8 @@ public class PatternRunner {
                 metrics,
                 trace.events(),
                 sanitizeScope(outcome.scope()),
-                takeaways(definition.id(), outcome, trace),
+                takeaways(definition.id(), outcome, trace, cacheStatus),
                 Instant.now());
-    }
-
-    public void clearCache() {
-        responseCache.clear();
     }
 
     @PreDestroy
@@ -240,29 +235,19 @@ public class PatternRunner {
         return invoke(workflow, Map.of("request", request));
     }
 
-    private RunOutcome runCaching(String request, ModelSet models, TraceCollector trace) {
-        String key = cacheKey(request);
-        boolean cacheHit = responseCache.containsKey(key);
+    private RunOutcome runCaching(String request, boolean cacheEnabled, ModelSet models, TraceCollector trace) {
         CacheableAnswerer answerer = AgenticServices.agentBuilder(CacheableAnswerer.class)
-                .chatModel(models.medium())
+                .chatModel(cacheEnabled ? models.cachedMedium() : models.medium())
                 .build();
 
-        UntypedAgent missPath = AgenticServices.conditionalBuilder()
-                .subAgents(scope -> CACHE_MISS.equals(scope.readState("answer", "")), answerer)
-                .name("Cache decision")
-                .build();
         UntypedAgent workflow = AgenticServices.sequenceBuilder()
-                .subAgents(new CacheLookup(responseCache, trace), missPath)
+                .subAgents(answerer)
                 .name("Caching workflow")
                 .outputKey("answer")
                 .listener(trace)
                 .build();
 
-        RunOutcome outcome = invoke(workflow, Map.of("request", request));
-        if (!cacheHit && !CACHE_MISS.equals(outcome.output())) {
-            responseCache.put(key, outcome.output());
-        }
-        return new RunOutcome(outcome.output(), outcome.scope(), cacheHit, 1, 1);
+        return invoke(workflow, Map.of("request", request));
     }
 
     private RunOutcome runBatching(String request, ModelSet models, TraceCollector trace) {
@@ -282,12 +267,12 @@ public class PatternRunner {
         String output = IntStream.range(0, answers.size())
                 .mapToObj(index -> (index + 1) + ". " + answers.get(index))
                 .collect(java.util.stream.Collectors.joining("\n"));
-        return new RunOutcome(output, Map.of("items", items, "answers", answers), false, items.size(), items.size());
+        return new RunOutcome(output, Map.of("items", items, "answers", answers), items.size(), items.size());
     }
 
     private static RunOutcome invoke(UntypedAgent workflow, Map<String, Object> input) {
         ResultWithAgenticScope<String> result = workflow.invokeWithAgenticScope(input);
-        return new RunOutcome(result.result(), result.agenticScope().state(), false, 1, 1);
+        return new RunOutcome(result.result(), result.agenticScope().state(), 1, 1);
     }
 
     private static List<String> splitBatch(String request) {
@@ -308,13 +293,13 @@ public class PatternRunner {
             case "rag" -> Math.max(minimum, observed + estimateTokens(LocalKnowledgeRetriever.fullCorpus()) * 2);
             case "tool-use" -> Math.max(minimum, (int) Math.ceil(observed * 1.55));
             case "step-back" -> observed;
-            case "caching" -> outcome.cacheHit() ? Math.max(160, minimum) : observed;
+            case "caching" -> observed;
             case "batching" -> observed;
             default -> minimum;
         };
     }
 
-    private static String measurementBasis(String patternId, boolean cacheHit) {
+    private static String measurementBasis(String patternId) {
         if ("batching".equals(patternId)) {
             return "Observed model tokens are unchanged; batching is measured primarily by wall time and throughput.";
         }
@@ -322,14 +307,12 @@ public class PatternRunner {
             return "Planning adds tokens to this turn; step-back pays back across avoided retries and rework, which one run cannot measure.";
         }
         if ("caching".equals(patternId)) {
-            return cacheHit
-                    ? "Observed cache hit versus the estimated tokens needed to regenerate the same stable answer."
-                    : "First request populates the cache, so no token saving is claimed until a repeat hit.";
+            return "Provider-reported cache reads and writes are subsets of input tokens. Every run makes a model call and generates a fresh answer; no content-token avoidance or dollar saving is inferred.";
         }
         return "Observed run tokens versus a modeled monolithic large-model baseline. Validate the projection with provider telemetry.";
     }
 
-    private static List<String> takeaways(String patternId, RunOutcome outcome, TraceCollector trace) {
+    private static List<String> takeaways(String patternId, RunOutcome outcome, TraceCollector trace, String cacheStatus) {
         return switch (patternId) {
             case "router" -> List.of(
                     "Only one specialist path was activated.",
@@ -358,9 +341,17 @@ public class PatternRunner {
                     "No token saving is claimed for a single turn; planning is an investment against retries.",
                     "Measure rework avoided, retry rate, and completion rate across turns.");
             case "caching" -> List.of(
-                    outcome.cacheHit() ? "This repeat request made zero model calls." : "This first request populated the exact-match cache.",
-                    "Run the same prompt again to see the hit path.",
-                    "Production caches need tenant boundaries, freshness, and invalidation.");
+                    switch (cacheStatus) {
+                        case "hit" -> "The provider reused %d input tokens; cache-write usage is %s.".formatted(
+                                trace.cachedInputTokens(),
+                                trace.cacheWriteTokens() == null ? "unknown" : trace.cacheWriteTokens() + " input tokens");
+                        case "miss-written" -> "The provider wrote %d input tokens but reused none on this call.".formatted(trace.cacheWriteTokens());
+                        case "miss" -> "The provider reported no cache reads or writes. Enabling caching does not guarantee a hit.";
+                        case "bypassed" -> "Caching was explicitly bypassed; the provider reported zero reads and writes.";
+                        default -> "Provider cache telemetry is incomplete; unknown usage is not treated as a miss or zero.";
+                    },
+                    "Every run makes a real model call. Only stable instructions are cacheable; the question and generated answer are not reused.",
+                    "Cached input remains in observed token totals. Cache pricing and retention are service-managed; writes can cost more than ordinary input.");
             case "batching" -> List.of(
                     outcome.concurrency() + " independent items were dispatched through the parallel mapper.",
                     "Concurrency improves elapsed time but does not automatically reduce content tokens.",
@@ -391,7 +382,6 @@ public class PatternRunner {
     private record RunOutcome(
             String output,
             Map<String, Object> scope,
-            boolean cacheHit,
             int concurrency,
             int itemCount) {
     }

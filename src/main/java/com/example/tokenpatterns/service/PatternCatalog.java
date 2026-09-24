@@ -210,28 +210,24 @@ public class PatternCatalog {
 
     private static PatternDefinition caching() {
         return new PatternDefinition(
-                "caching", 7, "Caching", "cache", "50–90% typical",
-                "The cheapest repeated model call is the one you never make.",
-                "An exact normalized-key cache answers stable repeat requests and invokes the model only on a miss.",
-                "A cache lookup non-AI agent writes answer; a conditional workflow activates the model only for the miss sentinel.",
-                "Stable definitions, deterministic transforms, shared prefixes, and repeated support questions.",
-                "Define freshness, tenancy, privacy, invalidation, and whether stochastic output is safe to reuse.",
-                "Cache hit rate",
+                "caching", 7, "Caching", "cache", "Provider measured",
+                "Reuse the work of processing stable instructions, not the previous answer.",
+                "Each run sends a real request with a reusable system prefix and reads cache usage from the provider response.",
+                "An Agentic answerer uses the official OpenAI Java SDK with an explicit cache breakpoint on stable instructions. The model still processes the question and generates a fresh answer.",
+                "Long reusable policies, reference material, shared instructions, and changing questions about the same context.",
+                "A hit is not guaranteed. Cache reads stay in input-token totals; cache writes can have a premium. The provider owns retention, and disabling caching bypasses rather than clears it.",
+                "Provider cache reads",
                 "What is idempotency and why does it matter for retries?",
                 List.of(
-                        n("input", "Request", "normalized key", "user", 7, 50),
-                        n("cache", "Cache", "exact lookup", "cache", 35, 50),
-                        n("model", "Generate", "on miss only", "model-medium", 66, 75),
-                        n("output", "Answer", "hit or fill", "output", 92, 50)),
+                        n("input", "Request", "new question", "user", 7, 50),
+                        n("prefix", "Instructions", "stable prefix", "cache", 34, 50),
+                        n("model", "Azure model", "read / write / bypass", "model-medium", 65, 50),
+                        n("output", "Fresh answer", "actual usage", "output", 93, 50)),
                 List.of(
-                        e("input", "cache", "lookup"),
-                        e("cache", "output", "hit"),
-                        d("cache", "model", "miss"),
-                        e("model", "output", "answer"),
-                        d("model", "cache", "store")),
-                Map.of(
-                        "Cache lookup", "cache",
-                        "Cache answerer", "model"));
+                        e("input", "prefix", "append"),
+                        e("prefix", "model", "every run"),
+                        e("model", "output", "generate")),
+                Map.of("Cache answerer", "model"));
     }
 
     private static PatternDefinition batching() {

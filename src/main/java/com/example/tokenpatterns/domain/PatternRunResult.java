@@ -22,8 +22,13 @@ public record PatternRunResult(
             int modelCalls,
             int orchestrationSteps,
             long durationMs,
-            boolean cacheHit,
             int concurrency,
+            int inputTokens,
+            int outputTokens,
+            Integer cachedInputTokens,
+            Integer cacheWriteTokens,
+            Integer reasoningTokens,
+            String cacheStatus,
             String basis) {
     }
 
@@ -36,6 +41,9 @@ public record PatternRunResult(
             long durationMs,
             int inputTokens,
             int outputTokens,
+            Integer cachedInputTokens,
+            Integer cacheWriteTokens,
+            Integer reasoningTokens,
             String inputPreview,
             String outputPreview,
             String status) {

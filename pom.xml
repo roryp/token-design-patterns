@@ -45,8 +45,13 @@
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-azure-open-ai</artifactId>
+            <artifactId>langchain4j-core</artifactId>
             <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java</artifactId>
+            <version>4.63.1</version>
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>

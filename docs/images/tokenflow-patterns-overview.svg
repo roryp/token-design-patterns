@@ -268,7 +268,7 @@
     <circle cx="34" cy="35" r="20" fill="#7c3aed"/>
     <text x="34" y="41" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="850">7</text>
     <text class="card-title" x="63" y="31">CACHING</text>
-    <text class="card-subtitle" x="63" y="50">A repeated answer can make zero model calls</text>
+    <text class="card-subtitle" x="63" y="50">Reuse a prefix; generate a fresh answer</text>
 
     <circle class="node" cx="35" cy="139" r="19"/>
     <text class="glyph" x="35" y="139">U</text>
@@ -277,20 +277,18 @@
       <ellipse cx="35" cy="8" rx="31" ry="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.7"/>
       <path d="M4 8v48c0 5 14 8 31 8s31-3 31-8V8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.7"/>
       <path d="M4 32c0 5 14 8 31 8s31-3 31-8" fill="none" stroke="#7c3aed" stroke-width="1.3"/>
-      <text x="35" y="27" text-anchor="middle" fill="#6d28d9" font-size="10" font-weight="800">CACHE</text>
+      <text x="35" y="27" text-anchor="middle" fill="#6d28d9" font-size="10" font-weight="800">PREFIX</text>
     </g>
-    <path class="connector" d="M167 122C209 122 207 98 241 98"/>
-    <circle cx="263" cy="98" r="20" fill="#ecfdf5" stroke="#15803d" stroke-width="1.8"/>
-    <path d="M254 98l6 6 12-15" fill="none" stroke="#15803d" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="308" y="102" fill="#15803d" font-size="11" font-weight="800">HIT · 0 calls</text>
-    <path class="connector-dashed" d="M167 156C207 156 208 181 241 181"/>
-    <circle class="model-medium" cx="263" cy="181" r="20"/>
-    <text class="model-glyph" x="263" y="181" fill="#d97706">M</text>
-    <path class="connector-dashed" d="M243 191C204 212 153 209 138 171"/>
-    <text x="311" y="185" fill="#b45309" font-size="11" font-weight="800">MISS · Terra</text>
-    <text class="note" x="182" y="230">Exact hit avoids generation; miss fills the cache</text>
+    <path class="connector" d="M167 139H229"/>
+    <circle class="model-medium" cx="251" cy="139" r="20"/>
+    <text class="model-glyph" x="251" y="139" fill="#d97706">M</text>
+    <path class="connector" d="M273 139H306"/>
+    <circle class="node" cx="329" cy="139" r="19"/>
+    <text class="glyph" x="329" y="139">A</text>
+    <text x="251" y="185" text-anchor="middle" fill="#b45309" font-size="11" font-weight="800">Terra · every run</text>
+    <text class="note" x="182" y="230">Input reused or written; output always generated</text>
     <rect x="24" y="251" width="317" height="30" rx="15" fill="#f5f3ff" stroke="#ddd6fe"/>
-    <text class="metric" x="182" y="271" fill="#6d28d9">↓ 50–90% typical hit path</text>
+    <text class="metric" x="182" y="271" fill="#6d28d9">Provider-confirmed reads + writes</text>
   </g>
 
   <!-- Card 8: Batching -->
