@@ -23,9 +23,17 @@ param modelVersion string = '2026-07-09'
 ])
 param modelSku string = 'GlobalStandard'
 
-@description('Capacity assigned to each GPT-5.6 deployment in thousands of tokens per minute.')
+@description('Luna capacity in thousands of tokens per minute; matches the selected workshop deployment.')
 @minValue(1)
-param modelCapacity int = 100
+param smallModelCapacity int = 1028
+
+@description('Terra capacity in thousands of tokens per minute; matches the selected workshop deployment.')
+@minValue(1)
+param mediumModelCapacity int = 1001
+
+@description('Sol capacity in thousands of tokens per minute; matches the selected workshop deployment.')
+@minValue(1)
+param largeModelCapacity int = 1001
 
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
@@ -50,7 +58,9 @@ module resources './resources.bicep' = {
     principalId: principalId
     modelVersion: modelVersion
     modelSku: modelSku
-    modelCapacity: modelCapacity
+    smallModelCapacity: smallModelCapacity
+    mediumModelCapacity: mediumModelCapacity
+    largeModelCapacity: largeModelCapacity
     tags: tags
   }
 }

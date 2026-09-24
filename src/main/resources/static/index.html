@@ -697,6 +697,38 @@
 
     .cache-flow-status[hidden] { display: none; }
 
+    .cache-explanation {
+      margin: 0 0 10px;
+      color: var(--cp-text-muted);
+      font-size: 0.76rem;
+      line-height: 1.5;
+    }
+
+    .cache-instructions {
+      margin-bottom: 14px;
+      padding: 10px;
+      border: 1px solid var(--cp-border);
+      border-radius: 10px;
+      background: var(--cp-surface-soft);
+      font-size: 0.76rem;
+    }
+
+    .cache-instructions summary {
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .cache-instructions pre {
+      max-height: 220px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--cp-text-muted);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.7rem;
+      line-height: 1.5;
+    }
+
     @keyframes cachePulse {
       from { stroke-width: 2; }
       to { stroke-width: 4; }
@@ -1538,7 +1570,12 @@
             </div>
           </div>
           <div class="runner-body">
-            <label class="input-label" for="promptInput"><span>Request</span><span id="charCount">0 / 12,000</span></label>
+            <p class="cache-explanation" id="cacheExplanation" hidden><strong>What is cached?</strong> The shared system instructions below, not this textbox. Different or random questions can still HIT the same prefix. A hit says nothing about answer quality.</p>
+            <details class="cache-instructions" id="cacheInstructions" hidden>
+              <summary>View the shared system instructions</summary>
+              <pre id="cacheInstructionsText">Open to load the public workshop instructions.</pre>
+            </details>
+            <label class="input-label" for="promptInput"><span id="requestLabel">Request</span><span id="charCount">0 / 12,000</span></label>
             <textarea id="promptInput" maxlength="12000" spellcheck="true"></textarea>
             <div class="runner-actions">
               <button class="primary-button" id="runButton" type="button">Run pattern</button>
@@ -1551,7 +1588,7 @@
             <div class="cache-receipt" id="cacheReceipt" role="status" hidden>
               <strong id="cacheStatus">Awaiting provider usage</strong>
               <p id="cacheUsage"></p>
-              <p>Reused input is still counted in observed tokens. Every run generates a new answer.</p>
+              <p>This measures instruction-prefix reuse, not a match for your question. Every run processes your question and generates a fresh answer.</p>
             </div>
           </div>
         </section>
@@ -1633,7 +1670,9 @@
       graph: null,
       running: false,
       cachePlan: null,
-      cacheError: false
+      cacheError: false,
+      cacheInstructions: null,
+      cacheInstructionsLoading: false
     };
     const cacheMobile = window.matchMedia("(max-width: 680px)");
 
@@ -1651,6 +1690,10 @@
       flowStatus: $("#flowStatus"),
       graphLegend: $("#graphLegend"),
       promptInput: $("#promptInput"),
+      requestLabel: $("#requestLabel"),
+      cacheExplanation: $("#cacheExplanation"),
+      cacheInstructions: $("#cacheInstructions"),
+      cacheInstructionsText: $("#cacheInstructionsText"),
       charCount: $("#charCount"),
       runButton: $("#runButton"),
       cacheControl: $("#cacheControl"),
@@ -1762,12 +1805,18 @@
       updateCharCount();
       elements.runButton.textContent = `Run ${pattern.name}`;
       elements.cacheControl.classList.toggle("visible", pattern.id === "caching");
+      elements.cacheExplanation.hidden = pattern.id !== "caching";
+      elements.cacheInstructions.hidden = pattern.id !== "caching";
+      elements.cacheInstructions.open = false;
+      elements.requestLabel.textContent = pattern.id === "caching" ? "Your new question (not cached)" : "Request";
+      if (pattern.id === "caching") elements.promptInput.setAttribute("aria-describedby", "cacheExplanation");
+      else elements.promptInput.removeAttribute("aria-describedby");
       elements.cacheEnabled.checked = true;
       elements.cacheEnabled.disabled = false;
-      elements.savingsLabel.textContent = pattern.id === "caching" ? "Input reused" : "Projected saving";
+      elements.savingsLabel.textContent = pattern.id === "caching" ? "Prefix reused" : "Projected saving";
       elements.baselineLabel.textContent = pattern.id === "caching" ? "Cache writes" : "Modeled baseline";
       elements.runNote.textContent = pattern.id === "caching"
-        ? "Every run calls Azure. Repeat to test prefix reuse, or uncheck caching to bypass it. Hits are not guaranteed; Azure manages retention."
+        ? "Try a different question: the same instructions can still be reused. Every run calls Azure. Uncheck caching to bypass reads and writes."
         : pattern.id === "batching"
           ? "Enter one to six independent items, separated by semicolons or newlines. Each item makes one model call."
           : "Each run executes the real LangChain4j Agentic workflow.";
@@ -1978,7 +2027,7 @@
           group.append(svgElement("ellipse", { cx: 0, cy: -42, rx: 78, ry: 20, class: "node-body" }));
           text(group, "PROMPT", 0, -2, "cache-title");
           text(group, "CACHE", 0, 20, "cache-title");
-          text(group, "Same prefix + same deployment", 0, 82, "cache-caption");
+          text(group, "Shared system instructions", 0, 82, "cache-caption");
         } else if (node.id === "hit" || node.id === "miss") {
           group.append(svgElement("rect", { x: -73, y: -28, width: 146, height: 56, rx: 12, class: "node-body" }));
           text(group, node.label, 0, 9, "cache-branch-title");
@@ -2003,7 +2052,7 @@
           ? "Run failed. No cache outcome is inferred without a completed provider receipt."
           : state.running
             ? "Calling Terra. Waiting for provider usage; neither HIT nor MISS is known yet."
-            : "Both paths call Terra. HIT reuses input processing, not an old answer. The animation replays provider usage after the response.";
+            : "HIT means shared system instructions were reused, not that your question matched. Different questions can hit. Both paths call Terra for a fresh answer.";
       }
     }
 
@@ -2024,7 +2073,7 @@
         node.classList.toggle("cache-inactive", !plan.route.includes(node.dataset.nodeId));
       });
       svg.querySelector('[data-cache-label="write"]').textContent = plan.writeLabel;
-      svg.querySelector('[data-cache-caption="hit"]').textContent = plan.branch === "hit" ? plan.readLabel : (cacheMobile.matches ? "Reuse input work" : "reuse cached input processing");
+      svg.querySelector('[data-cache-caption="hit"]').textContent = plan.branch === "hit" ? plan.readLabel : (cacheMobile.matches ? "Reuse prefix work" : "reuse instruction processing");
       elements.flowStatus.textContent = `${cacheStatusLabel(plan.outcome)}. ${plan.summary} Replay of provider usage, not a live cache lookup.`;
     }
 
@@ -2350,16 +2399,40 @@
 
     function cacheStatusLabel(status) {
       return {
-        hit: "Provider cache hit",
-        "miss-written": "Provider miss / written",
-        miss: "Provider cache miss",
-        bypassed: "Provider cache bypassed",
-        unknown: "Cache telemetry unavailable"
-      }[status] || "Cache telemetry unavailable";
+        hit: "Instruction-prefix hit",
+        "miss-written": "Instruction-prefix miss / written",
+        miss: "Instruction-prefix miss",
+        bypassed: "Instruction cache bypassed",
+        unknown: "Prefix cache telemetry unavailable"
+      }[status] || "Prefix cache telemetry unavailable";
     }
 
     function providerCount(value) {
       return value == null ? "unknown" : formatNumber(value);
+    }
+
+    async function loadCacheInstructions() {
+      if (!elements.cacheInstructions.open || state.cacheInstructionsLoading) return;
+      if (state.cacheInstructions !== null) {
+        elements.cacheInstructionsText.textContent = state.cacheInstructions;
+        return;
+      }
+      state.cacheInstructionsLoading = true;
+      elements.cacheInstructionsText.removeAttribute("role");
+      elements.cacheInstructionsText.textContent = "Loading shared instructions...";
+      try {
+        const response = await fetch("/api/cache-policy");
+        if (!response.ok) throw new Error(`Shared instructions could not be loaded (HTTP ${response.status}).`);
+        const text = await response.text();
+        if (!text.trim()) throw new Error("The shared instruction policy is empty.");
+        state.cacheInstructions = text;
+        elements.cacheInstructionsText.textContent = text;
+      } catch (error) {
+        elements.cacheInstructionsText.textContent = `${error.message} Close and reopen this panel to retry.`;
+        elements.cacheInstructionsText.setAttribute("role", "alert");
+      } finally {
+        state.cacheInstructionsLoading = false;
+      }
     }
 
     function renderMetrics(metrics, caching) {
@@ -2560,6 +2633,7 @@
     }
 
     elements.runButton.addEventListener("click", runCurrentPattern);
+    elements.cacheInstructions.addEventListener("toggle", loadCacheInstructions);
     elements.promptInput.addEventListener("input", updateCharCount);
     elements.promptInput.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") runCurrentPattern();

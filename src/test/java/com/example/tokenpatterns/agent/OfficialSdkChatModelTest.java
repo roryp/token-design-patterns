@@ -85,11 +85,14 @@ class OfficialSdkChatModelTest {
 
     @Test
     void placesExplicitCacheBreakpointOnlyOnStableSystemTextAndReusesVersionedKey() {
-        when(completions.create(any(ChatCompletionCreateParams.class))).thenReturn(response("answer"));
+        when(completions.create(any(ChatCompletionCreateParams.class)))
+                .thenReturn(response("first fresh answer"), response("second fresh answer"));
         var model = new OfficialSdkChatModel(client, DEPLOYMENT, CACHE_SYSTEM_PREFIX);
 
-        model.chat(SystemMessage.from(SYSTEM_PREFIX), UserMessage.from("first question"));
-        model.chat(SystemMessage.from(SYSTEM_PREFIX), UserMessage.from("different question"));
+        var first = model.chat(SystemMessage.from(SYSTEM_PREFIX), UserMessage.from("first question"));
+        var second = model.chat(SystemMessage.from(SYSTEM_PREFIX), UserMessage.from("different question"));
+        assertEquals("first fresh answer", first.aiMessage().text());
+        assertEquals("second fresh answer", second.aiMessage().text());
 
         var captured = ArgumentCaptor.forClass(ChatCompletionCreateParams.class);
         verify(completions, times(2)).create(captured.capture());

@@ -25,8 +25,8 @@ export function cacheFlowPlan(metrics) {
   }
   const format = value => value == null ? "unknown" : new Intl.NumberFormat().format(value);
   const explanations = {
-    hit: `${format(reads)} input tokens reused. Terra still generated a fresh answer.`,
-    "miss-written": `No input reused; ${format(writes)} input tokens written for possible later reuse.`,
+    hit: `${format(reads)} shared instruction-prefix tokens reused. Your question was processed and Terra generated a fresh answer.`,
+    "miss-written": `No prefix reused; ${format(writes)} input tokens written for possible later instruction reuse.`,
     miss: "The provider reported no cache reads or writes. Terra generated a fresh answer.",
     bypassed: "Cache explicitly bypassed: zero reads and writes. Terra generated a fresh answer.",
     unknown: "Cache telemetry is incomplete. No HIT or MISS branch is inferred."
@@ -36,7 +36,7 @@ export function cacheFlowPlan(metrics) {
     route: [...routes[outcome]],
     branch: outcome === "hit" ? "hit" : ["miss", "miss-written"].includes(outcome) ? "miss" : null,
     writes: writes > 0,
-    readLabel: reads == null ? "Read usage unknown" : `${format(reads)} input tokens reused`,
+    readLabel: reads == null ? "Read usage unknown" : `${format(reads)} prefix tokens reused`,
     writeLabel: writes == null ? "Cache-write usage unknown"
       : writes > 0 ? `Store reusable prefix: ${format(writes)} tokens` : "No cache writes reported",
     summary: explanations[outcome]

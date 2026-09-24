@@ -5,7 +5,9 @@ param resourceToken string
 param principalId string
 param modelVersion string
 param modelSku string
-param modelCapacity int
+param smallModelCapacity int
+param mediumModelCapacity int
+param largeModelCapacity int
 param tags object
 
 var appName = 'ca-tokenflow-${environmentName}-${resourceToken}'
@@ -112,7 +114,7 @@ resource smallModel 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
   name: smallModelDeployment
   sku: {
     name: modelSku
-    capacity: modelCapacity
+    capacity: smallModelCapacity
   }
   properties: {
     model: {
@@ -129,7 +131,7 @@ resource mediumModel 'Microsoft.CognitiveServices/accounts/deployments@2025-06-0
   name: mediumModelDeployment
   sku: {
     name: modelSku
-    capacity: modelCapacity
+    capacity: mediumModelCapacity
   }
   properties: {
     model: {
@@ -149,7 +151,7 @@ resource largeModel 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
   name: largeModelDeployment
   sku: {
     name: modelSku
-    capacity: modelCapacity
+    capacity: largeModelCapacity
   }
   properties: {
     model: {

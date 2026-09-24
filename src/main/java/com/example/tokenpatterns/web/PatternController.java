@@ -18,8 +18,13 @@ import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.exception.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -68,6 +74,14 @@ public class PatternController {
     @PostMapping("/runs")
     public PatternRunResult run(@Valid @RequestBody PatternRunRequest request) {
         return runner.run(request);
+    }
+
+    @GetMapping("/cache-policy")
+    public ResponseEntity<Resource> cachePolicy() {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache())
+                .contentType(new MediaType("text", "plain", StandardCharsets.UTF_8))
+                .body(new ClassPathResource("prompts/cache-policy.txt"));
     }
 
     @DeleteMapping("/cache")

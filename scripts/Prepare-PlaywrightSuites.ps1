@@ -8,7 +8,7 @@ if (-not $source.StartsWith('export async function testPatterns(')) {
 $function = $source.Substring('export '.Length)
 $output = Join-Path (Split-Path $PSScriptRoot -Parent) '.playwright-mcp'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
-foreach ($suite in @('desktop', 'mobile', 'branches', 'inputs')) {
+foreach ($suite in @('desktop', 'mobile', 'branches', 'inputs', 'cache')) {
     $wrapper = "async (page) => {`n$function`nreturn testPatterns(page, '$suite');`n}`n"
     $path = Join-Path $output "patterns-$suite.js"
     [System.IO.File]::WriteAllText($path, $wrapper)

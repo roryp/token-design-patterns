@@ -1,5 +1,5 @@
 export async function testPatterns(page, suite = "desktop") {
-  if (!["desktop", "mobile", "branches", "inputs"].includes(suite)) {
+  if (!["desktop", "mobile", "branches", "inputs", "cache"].includes(suite)) {
     throw new Error(`Unknown browser suite: ${suite}`);
   }
   // Separate suites keep real model calls within the MCP tool's execution window.
@@ -12,7 +12,7 @@ export async function testPatterns(page, suite = "desktop") {
   const onError = error => errors.push(error.message);
   page.on("pageerror", onError);
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
   await page.locator('.pattern-button[data-pattern-id="router"]').waitFor();
 
   function check(condition, message) {
@@ -146,6 +146,53 @@ export async function testPatterns(page, suite = "desktop") {
           check(result.data.output.trim().split(/\s+/).length <= 150, "Deep triage exceeds its 150-word scope");
         }
         return { calls: metrics.modelCalls, branch: branch.node };
+      });
+    }
+
+    if (suite === "cache") {
+      await scenario("shared-system-policy-is-visible", async () => {
+        await page.locator('.pattern-button[data-pattern-id="caching"]').click();
+        check(await page.locator("#requestLabel").innerText() === "Your new question (not cached)",
+          "Question and cached instructions are not distinguished");
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/cache-policy"));
+        await page.locator("#cacheInstructions summary").click();
+        const response = await pending;
+        check(response.ok(), "Public instruction policy is not available");
+        const policy = await response.text();
+        await page.waitForFunction(() => document.querySelector("#cacheInstructionsText").textContent
+          .startsWith("You are the developer reliability adviser"));
+        check(await page.locator("#cacheInstructionsText").textContent() === policy,
+          "The displayed instructions differ from the served policy");
+        check(policy.includes("IDEMPOTENCY") && policy.includes("PROVIDER PROMPT CACHES"),
+          "The shared reference policy is incomplete");
+      });
+      const answers = [];
+      for (const item of [
+        { name: "cache-fresh-rate-limit-question", input: "What does HTTP 429 mean, and what should a client do?", topic: /429|rate limit/i },
+        { name: "cache-fresh-java-question", input: "What is a Java NullPointerException? Give one prevention check.", topic: /NullPointerException|null/i },
+        { name: "cache-fresh-random-text", input: "qxv-73-zebra-cobalt-9102", topic: /./ }
+      ]) {
+        await scenario(item.name, async () => {
+          const result = await submit("caching", item.input);
+          const { metrics } = await validate("caching", result, 1);
+          check(result.data.scope.request === item.input, "The current question was replaced or reused");
+          check(item.topic.test(result.data.output), "Answer does not address the fresh question");
+          check(!answers.includes(result.data.output), "A previous answer was reused for a different input");
+          answers.push(result.data.output);
+          return {
+            cachedPrefixTokens: metrics.cachedInputTokens,
+            uncachedInputTokens: metrics.cachedInputTokens == null ? null : metrics.inputTokens - metrics.cachedInputTokens,
+            written: metrics.cacheWriteTokens,
+            calls: metrics.modelCalls,
+            cache: metrics.cacheStatus
+          };
+        });
+      }
+      await scenario("cache-random-text-with-bypass", async () => {
+        const result = await submit("caching", "qxv-73-zebra-cobalt-9102", false);
+        const { metrics } = await validate("caching", result, 1);
+        check(metrics.cacheStatus === "bypassed" && metrics.cachedInputTokens === 0
+          && metrics.cacheWriteTokens === 0, "Explicit bypass reused provider cache");
       });
     }
 
