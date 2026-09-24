@@ -453,6 +453,10 @@
       border-color: var(--cp-success);
     }
 
+    .legend .legend-hit { border-color: var(--cp-success); }
+    .legend .legend-miss { border-color: var(--cp-warning); }
+    .legend .legend-provider { border-color: var(--cp-accent); }
+
     .flow-viewport {
       position: relative;
       width: 100%;
@@ -573,6 +577,129 @@
       min-height: 310px;
       color: var(--cp-text-muted);
       font-size: 0.8rem;
+    }
+
+    .flow-viewport.cache-view {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #flowSvg.cache-diagram {
+      min-width: 0;
+      height: auto;
+    }
+
+    .cache-diagram .flow-edge {
+      stroke-width: 2.2;
+    }
+
+    .cache-diagram .flow-edge.active,
+    .cache-diagram .flow-edge.visited {
+      stroke-width: 3.5;
+    }
+
+    .cache-diagram .cache-symbol {
+      fill: var(--cp-text);
+      font-size: 38px;
+      font-weight: 800;
+      text-anchor: middle;
+    }
+
+    .cache-diagram .cache-title {
+      fill: var(--cp-text);
+      font-size: 17px;
+      font-weight: 750;
+      text-anchor: middle;
+    }
+
+    .cache-diagram .cache-branch-title {
+      fill: var(--cp-text);
+      font-size: 27px;
+      font-weight: 850;
+      text-anchor: middle;
+    }
+
+    .cache-diagram .cache-caption {
+      fill: var(--cp-text-muted);
+      font-size: 12px;
+      text-anchor: middle;
+    }
+
+    .cache-diagram[data-layout="mobile"] .cache-caption {
+      font-size: 14px;
+    }
+
+    .cache-diagram .cache-route-label {
+      fill: var(--cp-text-muted);
+      font-size: 12px;
+      font-weight: 650;
+      text-anchor: middle;
+      paint-order: stroke;
+      stroke: var(--cp-bg-elevated);
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+
+    .cache-diagram [data-node-id="hit"] .node-body,
+    .cache-diagram [data-node-id="output"] .node-body {
+      stroke: var(--cp-success);
+    }
+
+    .cache-diagram [data-node-id="miss"] .node-body,
+    .cache-diagram [data-node-id="model"] .node-body {
+      stroke: var(--cp-warning);
+    }
+
+    .cache-diagram [data-node-id="cache"] .node-body {
+      stroke: var(--cp-accent);
+    }
+
+    .cache-diagram .cache-hit-edge .flow-edge.active,
+    .cache-diagram .cache-hit-edge .flow-edge.visited {
+      stroke: var(--cp-success);
+    }
+
+    .cache-diagram .cache-miss-edge .flow-edge.active,
+    .cache-diagram .cache-miss-edge .flow-edge.visited {
+      stroke: var(--cp-warning);
+    }
+
+    .cache-diagram .cache-inactive .node-body,
+    .cache-diagram .cache-inactive .flow-edge {
+      opacity: 0.3;
+    }
+
+    .cache-diagram .cache-inactive .cache-branch-title {
+      fill: var(--cp-text-muted);
+    }
+
+    .cache-diagram .cache-optional:not(.cache-visible) {
+      display: none;
+    }
+
+    .cache-diagram .flow-node.active .node-body {
+      animation: cachePulse 650ms ease-in-out infinite alternate;
+    }
+
+    .cache-diagram .cache-arrow-default { fill: var(--cp-border-strong); }
+    .cache-diagram .cache-arrow-hit { fill: var(--cp-success); }
+    .cache-diagram .cache-arrow-miss { fill: var(--cp-warning); }
+    .cache-diagram .cache-arrow-write { fill: var(--cp-accent); }
+
+    .cache-flow-status {
+      margin: 0;
+      padding: 10px 14px 12px;
+      border-top: 1px solid var(--cp-border);
+      color: var(--cp-text-muted);
+      font-size: 0.76rem;
+      line-height: 1.5;
+    }
+
+    .cache-flow-status[hidden] { display: none; }
+
+    @keyframes cachePulse {
+      from { stroke-width: 2; }
+      to { stroke-width: 4; }
     }
 
     .run-grid {
@@ -1352,7 +1479,7 @@
           <div>
             <h3 id="flowHeading">Execution graph</h3>
           </div>
-          <div class="legend" aria-label="Graph legend">
+          <div class="legend" id="graphLegend" aria-label="Graph legend">
             <span><i class="legend-model"></i>Model</span>
             <span><i class="legend-non-ai"></i>Non-AI agent</span>
             <span><i></i>State</span>
@@ -1361,6 +1488,7 @@
         <div class="flow-viewport" id="flowViewport">
           <div class="flow-empty">Preparing graph…</div>
         </div>
+        <p class="cache-flow-status" id="flowStatus" role="status" hidden></p>
       </section>
 
       <div class="metrics-grid" aria-label="Run metrics">
@@ -1494,14 +1622,20 @@
     </aside>
   </main>
 
-  <script>
+  <script type="module">
+    import { cacheFlowPlan } from "./cache-flow.mjs";
+
     const state = {
       patterns: [],
       current: null,
       config: null,
       animationToken: 0,
-      graph: null
+      graph: null,
+      running: false,
+      cachePlan: null,
+      cacheError: false
     };
+    const cacheMobile = window.matchMedia("(max-width: 680px)");
 
     const $ = (selector) => document.querySelector(selector);
     const svgNs = "http://www.w3.org/2000/svg";
@@ -1514,6 +1648,8 @@
       patternImpact: $("#patternImpact"),
       metricLabel: $("#metricLabel"),
       flowViewport: $("#flowViewport"),
+      flowStatus: $("#flowStatus"),
+      graphLegend: $("#graphLegend"),
       promptInput: $("#promptInput"),
       charCount: $("#charCount"),
       runButton: $("#runButton"),
@@ -1609,6 +1745,9 @@
       if (!pattern) return;
       state.current = pattern;
       state.animationToken += 1;
+      state.cachePlan = null;
+      state.cacheError = false;
+      setRunning(false);
       document.querySelectorAll(".pattern-button").forEach((button) => {
         button.classList.toggle("active", button.dataset.patternId === id);
         button.setAttribute("aria-current", button.dataset.patternId === id ? "true" : "false");
@@ -1641,6 +1780,20 @@
     }
 
     function renderFlow(pattern) {
+      const legend = pattern.id === "caching"
+        ? [["legend-hit", "HIT"], ["legend-miss", "MISS"], ["legend-provider", "Provider internals"]]
+        : [["legend-model", "Model"], ["legend-non-ai", "Non-AI agent"], ["", "State"]];
+      elements.graphLegend.replaceChildren(...legend.map(([className, label]) => {
+        const item = createElement("span");
+        item.append(createElement("i", className), document.createTextNode(label));
+        return item;
+      }));
+      elements.flowViewport.classList.toggle("cache-view", pattern.id === "caching");
+      elements.flowStatus.hidden = pattern.id !== "caching";
+      if (pattern.id === "caching") {
+        renderCacheFlow(pattern);
+        return;
+      }
       const svg = svgElement("svg", {
         id: "flowSvg",
         viewBox: "0 0 1000 310",
@@ -1736,6 +1889,182 @@
       state.graph = { svg, nodePositions };
     }
 
+    function renderCacheFlow(pattern) {
+      const mobile = cacheMobile.matches;
+      const positions = mobile
+        ? { input: [210, 65], cache: [210, 220], hit: [105, 350], miss: [315, 350], model: [210, 470], output: [210, 605] }
+        : { input: [75, 165], cache: [300, 165], hit: [520, 85], miss: [520, 240], model: [750, 165], output: [930, 165] };
+      const paths = mobile ? {
+        "input-cache": "M210 99 V158",
+        "cache-hit": "M132 238 H115 Q90 238 90 265 V295 Q90 309 105 322",
+        "hit-model": "M105 378 C105 418 174 411 185 426",
+        "cache-miss": "M288 238 H305 Q330 238 330 265 V295 Q330 309 315 322",
+        "miss-model": "M315 378 C315 418 246 411 235 426",
+        "model-output": "M210 519 V571",
+        "model-cache": "M259 470 H382 Q398 470 398 454 V220 Q398 208 385 208 H289",
+        "input-model": "M175 65 H34 Q20 65 20 81 V456 Q20 470 34 470 H161",
+        "cache-model": "M210 282 V421"
+      } : {
+        "input-cache": "M110 165 H220",
+        "cache-hit": "M379 151 C415 151 410 85 446 85",
+        "hit-model": "M594 85 C650 85 649 128 704 147",
+        "cache-miss": "M379 179 C415 179 410 240 446 240",
+        "miss-model": "M594 240 C650 240 649 202 704 183",
+        "model-output": "M800 165 H895",
+        "model-cache": "M750 215 C750 318 696 322 635 322 H362 Q300 322 300 298 V230",
+        "input-model": "M75 130 V44 Q75 25 95 25 H730 Q750 25 750 45 V115",
+        "cache-model": "M379 165 H700"
+      };
+      const svg = svgElement("svg", {
+        id: "flowSvg", class: "cache-diagram", viewBox: mobile ? "0 0 420 670" : "0 0 1000 365",
+        role: "img", "aria-label": "Provider prompt cache: HIT and MISS both lead to Terra and a fresh answer",
+        "aria-describedby": "flowStatus", "data-layout": mobile ? "mobile" : "desktop"
+      });
+      const defs = svgElement("defs");
+      for (const type of ["default", "hit", "miss", "write"]) {
+        const marker = svgElement("marker", {
+          id: `cacheArrow-${type}`, markerWidth: 8, markerHeight: 8,
+          refX: 7, refY: 4, orient: "auto", markerUnits: "strokeWidth"
+        });
+        marker.append(svgElement("path", { d: "M0,0 L8,4 L0,8 Z", class: `cache-arrow-${type}` }));
+        defs.append(marker);
+      }
+      svg.append(defs);
+      const text = (parent, value, x, y, className, attributes = {}) => {
+        const label = svgElement("text", { x, y, class: className, ...attributes });
+        label.textContent = value;
+        parent.append(label);
+        return label;
+      };
+      for (const edge of pattern.edges) {
+        const key = `${edge.from}-${edge.to}`;
+        if (!paths[key]) throw new Error(`Missing cache graph connection: ${key}`);
+        const role = key === "model-cache" ? "write"
+          : key === "input-model" ? "bypass" : key === "cache-model" ? "unknown"
+          : [edge.from, edge.to].includes("hit") ? "hit"
+          : [edge.from, edge.to].includes("miss") ? "miss" : "common";
+        const optional = ["bypass", "unknown"].includes(role);
+        const group = svgElement("g", {
+          class: `cache-${role}-edge${optional ? " cache-optional" : ""}`,
+          "data-cache-role": role
+        });
+        group.append(svgElement("path", {
+          d: paths[key], class: `flow-edge${edge.dashed ? " dashed" : ""}`,
+          "data-from": edge.from, "data-to": edge.to,
+          "marker-end": `url(#cacheArrow-${["hit", "miss", "write"].includes(role) ? role : "default"})`
+        }));
+        if (role === "write") {
+          text(group, "Store reusable prefix only when writes are reported", mobile ? 411 : 530, mobile ? 348 : 345,
+            "cache-route-label", { "data-cache-label": "write", ...(mobile ? { transform: "rotate(-90 411 348)" } : {}) });
+        } else if (role === "bypass") {
+          text(group, "Cache bypassed", mobile ? 11 : 420, mobile ? 280 : 18,
+            "cache-route-label", mobile ? { transform: "rotate(-90 11 280)" } : {});
+        } else if (role === "unknown") {
+          text(group, "UNKNOWN", mobile ? 210 : 530, mobile ? 323 : 156, "cache-route-label");
+        }
+        svg.append(group);
+      }
+      for (const node of pattern.nodes) {
+        const [x, y] = positions[node.id];
+        const group = svgElement("g", {
+          class: "flow-node", transform: `translate(${x} ${y})`, "data-node-id": node.id,
+          "data-kind": node.kind, tabindex: 0, role: "group", "aria-label": `${node.label}: ${node.caption}`
+        });
+        if (node.id === "cache") {
+          group.append(svgElement("path", {
+            d: "M-78 -42 C-78 -64 78 -64 78 -42 V42 C78 64 -78 64 -78 42 Z", class: "node-body"
+          }));
+          group.append(svgElement("ellipse", { cx: 0, cy: -42, rx: 78, ry: 20, class: "node-body" }));
+          text(group, "PROMPT", 0, -2, "cache-title");
+          text(group, "CACHE", 0, 20, "cache-title");
+          text(group, "Same prefix + same deployment", 0, 82, "cache-caption");
+        } else if (node.id === "hit" || node.id === "miss") {
+          group.append(svgElement("rect", { x: -73, y: -28, width: 146, height: 56, rx: 12, class: "node-body" }));
+          text(group, node.label, 0, 9, "cache-branch-title");
+          text(group, mobile ? (node.id === "hit" ? "Reuse input work" : "No input reused") : node.caption,
+            0, 48, "cache-caption", { "data-cache-caption": node.id });
+        } else {
+          group.append(svgElement("circle", { cx: 0, cy: 0, r: node.id === "model" ? 49 : 34, class: "node-body" }));
+          text(group, nodeSymbol(node.kind), 0, 13, "cache-symbol");
+          text(group, node.label, 0, node.id === "model" ? 72 : 58, "cache-title");
+          if (!mobile) text(group, node.caption, 0, node.id === "model" ? 90 : 77, "cache-caption");
+        }
+        svg.append(group);
+      }
+      elements.flowViewport.replaceChildren(svg);
+      state.graph = { svg, cache: true };
+      if (state.cachePlan) {
+        prepareCacheFlow(state.cachePlan);
+        completeCacheFlow(state.cachePlan);
+      } else {
+        elements.flowStatus.textContent = state.cacheError
+          ? "Run failed. No cache outcome is inferred without a completed provider receipt."
+          : state.running
+            ? "Calling Terra. Waiting for provider usage; neither HIT nor MISS is known yet."
+            : "Both paths call Terra. HIT reuses input processing, not an old answer. The animation replays provider usage after the response.";
+      }
+    }
+
+    function prepareCacheFlow(plan) {
+      const svg = state.graph.svg;
+      svg.dataset.cacheOutcome = plan.outcome;
+      svg.querySelectorAll("[data-cache-role]").forEach(group => {
+        const role = group.dataset.cacheRole;
+        const selected = role === "common" || role === plan.branch
+          || (role === "write" && plan.writes)
+          || (role === "bypass" && plan.outcome === "bypassed")
+          || (role === "unknown" && plan.outcome === "unknown");
+        const bypassedCache = plan.outcome === "bypassed" && Boolean(group.querySelector('[data-to="cache"]'));
+        group.classList.toggle("cache-inactive", !selected || bypassedCache);
+        group.classList.toggle("cache-visible", selected);
+      });
+      svg.querySelectorAll(".flow-node").forEach(node => {
+        node.classList.toggle("cache-inactive", !plan.route.includes(node.dataset.nodeId));
+      });
+      svg.querySelector('[data-cache-label="write"]').textContent = plan.writeLabel;
+      svg.querySelector('[data-cache-caption="hit"]').textContent = plan.branch === "hit" ? plan.readLabel : (cacheMobile.matches ? "Reuse input work" : "reuse cached input processing");
+      elements.flowStatus.textContent = `${cacheStatusLabel(plan.outcome)}. ${plan.summary} Replay of provider usage, not a live cache lookup.`;
+    }
+
+    function completeCacheFlow(plan) {
+      const svg = state.graph.svg;
+      svg.querySelectorAll(".active").forEach(element => element.classList.remove("active"));
+      for (let index = 0; index < plan.route.length; index++) {
+        const id = plan.route[index];
+        svg.querySelector(`[data-node-id="${id}"]`).classList.add("visited");
+        if (index > 0) cacheEdge(plan.route[index - 1], id).classList.add("visited");
+      }
+      if (plan.writes) cacheEdge("model", "cache").classList.add("visited");
+    }
+
+    function cacheEdge(from, to) {
+      const edge = state.graph.svg.querySelector(`.flow-edge[data-from="${from}"][data-to="${to}"]`);
+      if (!edge) throw new Error(`Missing cache animation connection: ${from} to ${to}`);
+      return edge;
+    }
+
+    async function animateCacheFlow(plan, runToken, reducedMotion) {
+      const graph = state.graph;
+      prepareCacheFlow(plan);
+      for (let index = 0; index < plan.route.length; index++) {
+        if (runToken !== state.animationToken || state.graph !== graph) return;
+        graph.svg.querySelectorAll(".active").forEach(element => {
+          element.classList.remove("active");
+          element.classList.add("visited");
+        });
+        const id = plan.route[index];
+        graph.svg.querySelector(`[data-node-id="${id}"]`).classList.add("active");
+        if (index > 0) cacheEdge(plan.route[index - 1], id).classList.add("active");
+        if (!reducedMotion) await delay(350);
+        if (runToken !== state.animationToken || state.graph !== graph) return;
+        if (id === "model" && plan.writes) {
+          cacheEdge("model", "cache").classList.add("active");
+          if (!reducedMotion) await delay(350);
+        }
+      }
+      if (runToken === state.animationToken && state.graph === graph) completeCacheFlow(plan);
+    }
+
     function nodeSymbol(kind) {
       const symbols = {
         user: "U",
@@ -1792,6 +2121,8 @@
       hideError();
       state.animationToken += 1;
       const runToken = state.animationToken;
+      state.cachePlan = null;
+      state.cacheError = false;
       setRunning(true);
       resetGraphState();
       elements.cacheReceipt.hidden = true;
@@ -1824,6 +2155,11 @@
           showError(error.message);
           elements.answerSubtitle.textContent = "Run failed";
           elements.answerBody.replaceChildren(createElement("div", "answer-empty", error.message));
+          if (state.current.id === "caching") {
+            state.cachePlan = null;
+            state.cacheError = true;
+            renderCacheFlow(state.current);
+          }
         }
       } finally {
         if (runToken === state.animationToken) setRunning(false);
@@ -1831,7 +2167,8 @@
     }
 
     function setRunning(running) {
-      elements.runButton.disabled = running;
+      state.running = running;
+      elements.runButton.disabled = running || !state.config?.modelsConfigured;
       elements.runButton.textContent = running ? "Running…" : `Run ${state.current?.name || "pattern"}`;
       elements.promptInput.disabled = running;
       elements.cacheEnabled.disabled = running;
@@ -1979,6 +2316,7 @@
     }
 
     function renderRun(result) {
+      state.cachePlan = result.patternId === "caching" ? cacheFlowPlan(result.metrics) : null;
       const output = createElement("div", "answer-output");
       output.append(renderMarkdown(result.output));
       const meta = createElement("div", "answer-meta");
@@ -2065,6 +2403,11 @@
 
     async function animateTrace(trace, runToken) {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (state.current.id === "caching") {
+        elements.traceList.querySelectorAll(".trace-item").forEach(item => item.classList.add("revealed"));
+        await animateCacheFlow(state.cachePlan, runToken, reducedMotion);
+        return;
+      }
       let previousNode = "";
       for (const event of trace) {
         if (runToken !== state.animationToken) return;
@@ -2144,6 +2487,10 @@
     }
 
     function resetGraphState() {
+      if (state.current?.id === "caching") {
+        renderCacheFlow(state.current);
+        return;
+      }
       const svg = state.graph?.svg;
       if (!svg) return;
       svg.querySelectorAll(".active, .visited, .failed").forEach((element) => element.classList.remove("active", "visited", "failed"));
@@ -2206,6 +2553,10 @@
     $("#themeToggle").addEventListener("click", () => {
       const current = document.documentElement.getAttribute("data-theme");
       document.documentElement.setAttribute("data-theme", current === "dark" ? "light" : "dark");
+    });
+
+    cacheMobile.addEventListener("change", () => {
+      if (state.current?.id === "caching") renderCacheFlow(state.current);
     });
 
     loadApplication();

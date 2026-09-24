@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -21,6 +22,17 @@ class PatternControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Test
+    void unversionedUiResourcesMustBeRevalidatedAfterDeployment() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-cache"));
+        mockMvc.perform(get("/cache-flow.mjs"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-cache"))
+                .andExpect(header().string("Content-Type", org.hamcrest.Matchers.startsWith("text/javascript")));
+    }
 
     @Test
     void returnsThePatternCatalog() throws Exception {

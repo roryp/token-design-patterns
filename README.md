@@ -359,6 +359,7 @@ Review the target subscription and environment before running this destructive c
 - **Avoided tokens** equal the modeled baseline minus observed tokens.
 - **Caching** uses a useful shared reliability policy of more than 1,024 tokens followed by the current question. Only the system prefix has an explicit cache breakpoint; a stable versioned cache key helps routing. The API receives `cachedInputTokens`, `cacheWriteTokens`, and `reasoningTokens` from provider usage. Missing optional fields are `null` (unknown), not invented zeros.
 - **Cache status** is `hit` when the provider reports reused input, `miss-written` when it reports writes without reads, `miss` when both counts are zero with caching enabled, `bypassed` when both are zero with caching disabled, or `unknown` when evidence is incomplete. A hit can also include writes.
+- **Cache animation** replays the provider receipt after the response arrives; it is not a live stream of Azure's internal operations. The HIT and MISS branches both lead through Terra to a fresh answer. The dashed return-to-cache path lights only when `cacheWriteTokens > 0`, including mixed read/write hits. Bypass skips the cache, and unknown telemetry lights neither outcome branch. These visual stages do not create extra agents, trace events, or model calls. A vertical layout keeps the diagram readable on mobile; reduced motion shows the same confirmed result without animated movement.
 - **No answer cache** remains. Every caching run calls the provider. Cached reads and writes are subsets of input, and reasoning is a subset of output; these counts are not added twice or subtracted from observed usage. The caching baseline equals observed usage, so avoided tokens and projected savings stay zero. The UI's **Input reused** percentage is cached input divided by observed input, not a price discount.
 - **Cache cost and retention** are service-managed. Cache writes can carry a premium, so the lab does not invent a dollar saving. Enabling caching does not guarantee a hit. Disabling it sends explicit mode without a breakpoint; it bypasses caching rather than invalidating prior entries. Other patterns explicitly bypass caching so their measurements do not depend on hidden cache reuse.
 - **Batching** reports zero content-token savings. Its primary measurements are elapsed time and concurrency.
@@ -455,6 +456,16 @@ Run a clean package build before deployment:
 ```
 
 The test suite executes all eight workflows against a deterministic stub `ChatModel`, validates the API, confirms that repeated caching runs still make model calls, checks cache-read/write/unknown fixtures, and checks parallel mapper fan-out. Official SDK request and response mapping is tested without Azure, network access, or model credentials. The test fixtures are not a production simulation mode.
+
+The dependency-free animation route tests use Node's built-in test runner (Node 18+); there is no frontend build or package installation:
+
+```powershell
+node --test .\scripts\cache-flow.test.mjs
+```
+
+They cover HIT, MISS with and without writes, mixed read/write hits, bypass, missing telemetry, inconsistent receipts, and isolation between runs. Browser validation must also check the rendered branch classes, pending/error states, viewport changes, reduced motion, and the return path against both test fixtures and real provider receipts.
+
+The unversioned HTML and JavaScript resources send `Cache-Control: no-cache` so browsers revalidate them after deployments. An already-open page must still be reloaded to use a new UI; no timestamp query strings or forced cache-busting URLs are required.
 
 ### Live provider verification
 
