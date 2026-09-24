@@ -28,6 +28,7 @@ public record PatternRunResult(
             Integer cachedInputTokens,
             Integer cacheWriteTokens,
             Integer reasoningTokens,
+            boolean cacheEnabled,
             String cacheStatus,
             String basis) {
     }

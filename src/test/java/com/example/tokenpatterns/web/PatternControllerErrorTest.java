@@ -1,5 +1,6 @@
 package com.example.tokenpatterns.web;
 
+import com.example.tokenpatterns.agent.CacheInstructions;
 import com.example.tokenpatterns.agent.ModelCatalog;
 import com.example.tokenpatterns.domain.ModelOutputLimitException;
 import com.example.tokenpatterns.service.PatternCatalog;
@@ -60,6 +61,9 @@ class PatternControllerErrorTest {
 
     @MockitoBean
     private ModelCatalog models;
+
+    @MockitoBean
+    private CacheInstructions cacheInstructions;
 
     @ParameterizedTest
     @MethodSource("providerFailures")

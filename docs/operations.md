@@ -26,7 +26,7 @@ The app expects GPT-5.6-compatible model and explicit prompt-cache capabilities.
 |---|---|---|
 | `GET` | `/api/patterns` | Eight pattern definitions, samples, and graph topologies |
 | `GET` | `/api/config` | `modelsConfigured`, `models`, and `agenticVersion`; no secrets |
-| `GET` | `/api/cache-policy` | Public, read-only workshop system instructions, identical to the resource sent by the caching agent |
+| `GET` | `/api/cache-policy` | The exact, public instructions the caching agent sends. With `?session=<cacheSession>`, that session's first line precedes the shared policy |
 | `POST` | `/api/runs` | Execute a real workflow and return output, metrics, trace, and sanitized scope |
 | `DELETE` | `/api/cache` | Retired: `410 Gone`; the application cannot clear Azure's prompt cache |
 
@@ -36,13 +36,14 @@ Example:
 {
   "patternId": "caching",
   "input": "What is idempotency and why does it matter for retries?",
-  "cacheEnabled": true
+  "cacheSession": "3f0c2a9e-6b1d-4c7a-9e2f-5d8b1a4c7e60"
 }
 ```
 
 - `patternId` is one of `router`, `triage`, `compression`, `rag`, `tool-use`, `step-back`, `caching`, or `batching`.
 - `input` must be nonblank and at most 12,000 characters.
 - For caching, `cacheEnabled` defaults to `true`. `false` bypasses reads and writes without invalidating existing provider entries. Other patterns always bypass prompt caching.
+- For caching, optional `cacheSession` must be a lowercase version 4 UUID; anything else returns `400` before a model is called. The browser creates one per page load and on **Start over**. Without it, the caching agent sends the shared policy, which earlier requests have probably cached already.
 - Batching accepts one to six non-empty semicolon- or newline-separated items. One item means one model call. Empty or oversized batches are rejected before model initialization.
 - Deep triage requests a recommendation of at most 150 words; the plan executor requests at most 200. The completion budget stays 2,000 tokens, including reasoning. Incomplete responses remain failures.
 - Application validation failures return `400`, provider throttling returns `429`, and other model-provider failures return `502`, using `ProblemDetail`. Provider errors are classified through the Agentic cause chain; sanitized messages replace internal reflection-wrapper errors.
@@ -50,6 +51,8 @@ Example:
 ### Token and cache fields
 
 `metrics` contains `inputTokens`, `outputTokens`, `observedTokens`, projected-baseline fields, model calls, duration, orchestration steps, concurrency, and nullable `cachedInputTokens`, `cacheWriteTokens`, and `reasoningTokens`. Model trace events include the same provider usage details.
+
+`metrics.cacheEnabled` records the cache option used for this request. The server derives `cacheStatus` from the model call's provider counters, and the page shows HIT or MISS only from that status. Missing telemetry remains unknown. Nothing compares questions or replays a previous run.
 
 | `cacheStatus` | Provider evidence |
 |---|---|
@@ -61,9 +64,17 @@ Example:
 
 The former application-cache `cacheHit` boolean has been removed. There is no local answer cache.
 
-The caching prompt uses a meaningful shared [reliability policy](../src/main/resources/prompts/cache-policy.txt) longer than 1,024 tokens, followed by the current question. An explicit breakpoint applies only to the system prefix. A stable versioned cache key helps routing; it does not guarantee a hit. The provider controls retention and pricing.
+### Provider caching
 
-**Different or random questions can hit the same prefix.** The user message follows the breakpoint and is always sent afresh; the application neither looks it up in an answer map nor caches the generated answer. Open the shared-instructions panel in the UI to inspect exactly which public policy is reusable. A cache hit is not a statement about question similarity, validity, or answer quality. Do not put secrets or private instructions in this public workshop policy.
+The caching agent sends [its instructions](../src/main/java/com/example/tokenpatterns/agent/CacheInstructions.java) as the only leading system input, with an explicit `prompt_cache_breakpoint` at their end, the key `tokenflow-policy-v1`, and `prompt_cache_options: {mode: explicit, ttl: 30m}`. The instructions are the browser session's line followed by the shared [reliability policy](../src/main/resources/prompts/cache-policy.txt), which is longer than 1,024 tokens. The fixed question follows the breakpoint, so it is never part of the cached prefix.
+
+- **Test 1 misses.** The session line makes the whole prefix new, so Azure reports `cached_tokens: 0` and writes it (`cache_write_tokens` of about 1,770).
+- **Test 2 hits.** Azure reads the same prefix back (`cached_tokens` of about 1,770 and `cache_write_tokens: 0`). Terra still generates a fresh answer.
+- **Start over** creates a new session, so the next test misses again.
+
+Every model call uses the Responses API (`/openai/v1/responses` with `store: false`). In interleaved trials against the GlobalStandard GPT-5.6 deployments on September 24, 2026, test 2 hit in 21 of 21 Responses API sessions but in only 11 of 48 Chat Completions sessions, whose requests reached replicas that did not have the written prefix. Per-session cache keys, pauses of up to 10 seconds, and `prompt_cache_retention: 24h` did not change the Chat Completions result. A HIT remains the provider's decision, so the page reports each result as returned.
+
+`/api/cache-policy` serves these instructions publicly. Do not put secrets or private instructions in the workshop policy.
 
 Cached reads and writes are subsets of input. Reasoning is a subset of output. Do not subtract them from observed usage or add them twice. Cache writes may carry a premium. Projected baselines are modeled comparisons, not provider billing data. Caching, batching, and step-back planning keep their projected baseline equal to observed usage and claim no single-run content-token avoidance.
 
@@ -84,7 +95,7 @@ flowchart LR
 
 Each request gets its own workflow and trace collector. Agent outputs use named scope keys such as `route`, `complexity`, `compactContext`, `context`, `plan`, and `answer`. Deterministic Java agents perform routing gates, retrieval, and arithmetic without model reasoning.
 
-The [SDK adapter](../src/main/java/com/example/tokenpatterns/agent/OfficialSdkChatModel.java) uses typed requests and provider usage getters. It does not scrape logs or infer cache hits from latency. The [UI](../src/main/resources/static/index.html) replays completed traces and receipts; its cache branches are visual explanations, not extra agent invocations.
+The [SDK adapter](../src/main/java/com/example/tokenpatterns/agent/OfficialSdkChatModel.java) sends typed Responses API requests and maps provider usage from `input_tokens_details` and `output_tokens_details`. It does not scrape logs or infer cache hits from latency. The [UI](../src/main/resources/static/index.html) replays completed traces; animation never adds model calls or synthetic trace events.
 
 ## Azure architecture
 
@@ -152,10 +163,9 @@ For an existing environment, use `azd env select <name>`, validate locally, prev
 
 ```powershell
 .\mvnw.cmd clean package
-node --test .\scripts\cache-flow.test.mjs
 ```
 
-Use `sh ./mvnw clean package` on macOS/Linux. Java tests use `StubChatModel` through `StubModelConfiguration` and mocked SDK responses; they do not call Azure. Node 18+ runs the animation tests without installing packages. Test stubs are not a production fallback.
+Use `sh ./mvnw clean package` on macOS/Linux. Java tests use `StubChatModel` through `StubModelConfiguration` and mocked SDK responses; they do not call Azure. Test stubs are not a production fallback.
 
 ### Live API checks — paid model calls
 
@@ -166,7 +176,7 @@ $settings = azd env get-values --output json | ConvertFrom-Json
 .\scripts\Test-ProviderCaching.ps1 -BaseUrl $settings.AZURE_CONTAINER_APP_URL -AllPatterns
 ```
 
-The script validates usage, answers, cache bypass, and the other workflows. It makes up to six cache-enabled attempts to observe a genuine read of at least 1,024 tokens and fails if none is observed. It never fabricates a cold cache or claims to clear provider state.
+The script validates usage, answers, and the other workflows. With a new cache session, test 1 must MISS and write at least 1,024 tokens, and one of the next five tests must HIT with at least 1,024 cached tokens; the summary names the test that hit. A bypassed request on the now-cached prefix must then read and write nothing. The script never fabricates a cold cache or claims to clear provider state.
 
 ### Playwright MCP checks — paid model calls
 
@@ -180,7 +190,7 @@ The script validates usage, answers, cache bypass, and the other workflows. It m
    - `.playwright-mcp\patterns-cache.js`
 4. Require `failed: 0` and an empty `pageErrors` list in **each** result.
 
-The shared [suite](../scripts/playwright-patterns.mjs) checks all eight patterns at both widths, additional routing and deep-triage paths, provider-cache behavior, batch limits, keyboard submission, empty-input feedback, and graph reset. The cache suite also reads the public instruction policy and submits different questions plus random text, checking fresh answers, one model call per run, actual prefix usage, and explicit bypass. It compares UI metrics and animations with actual responses and does not intercept or mock provider requests. The input suite deliberately produces two `400` responses for invalid batches.
+The shared [suite](../scripts/playwright-patterns.mjs) checks all eight patterns at both widths, additional routing and deep-triage paths, provider-cache behavior, batch limits, keyboard submission, empty-input feedback, and graph reset. The cache suite checks that caching shows no prompt box and that the dropdown matches the instructions the server sends. Test 1 must MISS and write, test 2 should HIT (the result reports `test2Hit`; up to test 6 is accepted), and **Start over** must produce a new session whose first test misses again. Every cache test must show the provider's result on the graph, in the history, and on the answer badge. The suites compare UI metrics and animations with actual responses and never intercept or mock provider requests. The input suite deliberately produces two `400` responses for invalid batches.
 
 After deployment, wait until the intended revision is ready and refresh the page. Unversioned UI resources send `Cache-Control: no-cache`; an already-open document still needs reloading.
 
@@ -250,8 +260,8 @@ Stopping preserves resources and existing scale settings. It does not eliminate 
 | Provider `502` or response-token-limit message | Read the actionable error, narrow the task if it exhausted its budget, and inspect sanitized logs; never treat a partial answer as success |
 | Platform `404` after deployment | App-level stopped state versus revision readiness; use [start and stop](#start-and-stop) |
 | Old frontend after deployment | Confirm the new revision is ready, then reload the browser |
-| No provider cache hit | Stable prefix, same deployment, cache enabled, and provider usage. Eligibility is not a guarantee of reuse |
-| Cache hit after changing the question | Expected when the shared system instruction prefix matches. The new question is outside the breakpoint and still receives a fresh generated answer |
+| Test 1 reports HIT | A new session cannot hit: its first line makes the prefix new. Reload the page after deployment and check that the run request carries `cacheSession` |
+| Test 2 reports MISS | Run test 3; a HIT is the provider's decision. Check that the deployment is Standard pay-as-you-go GPT-5.6 (PTU does not support breakpoints) and that requests use the Responses API |
 | Model deployment `RequestConflict` | Keep the Bicep Luna → Terra → Sol deployment dependencies |
 | Rejected `workloadProfileName` | This template is consumption-only; do not add a workload profile without changing the environment architecture |
 | Remote build differs from local | Rebuild with a clean Maven cache in mind; keep explicit SDK/identity dependencies |

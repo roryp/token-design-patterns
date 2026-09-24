@@ -16,8 +16,8 @@ An interactive Java workshop for learning when to call a model, which model to c
 
 1. **Start with Triage.** Keep the sample HTTP 429 question and select **Run Triage**. Follow the fast path: the Java gate uses zero model tokens, then the small model answers.
 2. **Trigger escalation.** Replace the question with the prompt below. The graph should select the deep path instead.
-3. **Try Caching.** Open **View the shared system instructions**, then ask about HTTP 429 and a Java `NullPointerException`. Both can HIT: Azure reuses the same instructions, not your question. Each answer is generated afresh. A hit is not guaranteed.
-4. **Bypass the cache.** Uncheck the option and run again. This bypasses cache reads and writes; it does not clear Azure's cache.
+3. **Try Caching.** Open **Cached instructions for this browser session** to see exactly what Terra receives. Select **Run cache test 1**: Azure reports a MISS and writes the instructions to its cache. Select **Run cache test 2**: Azure reports a HIT and reuses them. Terra writes a fresh answer both times.
+4. **Start over.** Select **Start over** for new instructions. The next test is a MISS again.
 5. **Try Batching.** Run the three supplied items. Notice three model calls and concurrent work, not automatic content-token savings.
 
 Prompt for the deep-triage step:
@@ -26,11 +26,11 @@ Prompt for the deep-triage step:
 Design a secure distributed multi-region architecture for a payment system, including migration trade-offs.
 ```
 
-The important distinction in the cache view: **HIT reuses the fixed system instructions, not the textbox or an old answer. Even random text can legitimately share that prefix. Both branches still call Terra.**
+**HIT and MISS are Azure's own numbers for that model call:** `cached_tokens` read from its prompt cache and `cache_write_tokens` written to it. The first line of the instructions is unique to your browser session, so test 1 has nothing to reuse. Test 2 sends the same instructions and the same fixed question, then reads the cached instructions back. The question and the answer are never cached.
 
-[![Real provider cache hit: 1,723 input tokens reused, with the HIT path flowing through Terra to a fresh answer](docs/images/tokenflow-provider-cache.png)](docs/images/tokenflow-provider-cache.png)
+[![Cache test 2 on Azure: HIT, reusing the 1,773 instruction tokens that test 1 wrote. The dropdown shows the exact session instructions, and the history shows test 1 MISS, then test 2 HIT](docs/images/tokenflow-provider-cache.png)](docs/images/tokenflow-provider-cache.png)
 
-The dashed return path lights only when the provider reports cache writes. The animation replays the completed receipt; it is not a live stream of Azure's internal operations. Bypass and missing telemetry are shown explicitly rather than guessed.
+The page never infers a result. If Azure reports another MISS, the page says so; run the next test. The lab uses the Responses API because Azure reliably serves the instructions written by test 1 to test 2; with Chat Completions, test 2 usually missed in our trials ([details](docs/operations.md#provider-caching)).
 
 ## The eight patterns
 
@@ -44,7 +44,7 @@ All patterns have a built-in sample, an execution graph, and teaching notes.
 | **RAG** | Ask how `AgenticScope` shares state | Two relevant local knowledge chunks ground the answer |
 | **Tool use** | Run the token-cost calculation | Java does the arithmetic; the model explains it |
 | **Step-back planning** | Run the migration-planning sample | A short plan guides execution; planning itself adds tokens |
-| **Caching** | Change the question, inspect the shared instructions, then disable caching | Instruction-prefix reads and writes, not question matching; a fresh answer every time |
+| **Caching** | Run cache test 1, then test 2, then **Start over** | Test 1 writes the instructions (MISS), test 2 reads them (HIT), and every test generates a fresh answer |
 | **Batching** | Submit one to six independent items | One model call per item, ordered results, bounded concurrency |
 
 Batch items can be separated by semicolons or newlines. Empty batches and more than six items are rejected before model initialization; work is never invented or silently dropped.
@@ -115,7 +115,7 @@ The identity option uses `DefaultAzureCredential`: Azure CLI credentials locally
 | Medium | `gpt-5.6-terra` | Code answers, caching, batch work |
 | Large | `gpt-5.6-sol` | Architecture, deeper reasoning, grounded answers |
 
-For custom deployment names or API-key authentication, see [configuration](docs/operations.md#configuration). LangChain4j Agentic orchestrates the workflows; the official OpenAI Java SDK handles Azure `/openai/v1/` requests and provider usage.
+For custom deployment names or API-key authentication, see [configuration](docs/operations.md#configuration). LangChain4j Agentic orchestrates the workflows; the official OpenAI Java SDK sends stateless Responses API requests to Azure `/openai/v1/` and reads provider usage.
 
 ## Deploy to Azure
 
@@ -134,7 +134,7 @@ The template uses managed identity, external HTTPS, a non-root Java 21 container
 ## Before you go on stage
 
 - Open the deployed URL and run one sample to warm the app and verify model access.
-- Run the cache sample before the session, but **do not promise a hit** during the talk.
+- Run cache tests 1 and 2 before the session to confirm MISS, then HIT. A HIT is very likely but not guaranteed; if test 2 reports MISS, run test 3.
 - Check model quota for the expected audience. One batch can make up to six model calls.
 - Refresh the browser after deploying changes. If the app was explicitly stopped, deployment alone may not restart it; see [start and stop](docs/operations.md#start-and-stop).
 - Keep these screenshots as a clearly labeled backup if connectivity fails.
@@ -146,10 +146,9 @@ From the repository root:
 
 ```powershell
 .\mvnw.cmd clean package
-node --test .\scripts\cache-flow.test.mjs
 ```
 
-Java tests use test-scoped stubs and need no Azure access or model credentials. The animation tests use Node 18+ with no package installation or frontend build. On macOS/Linux, use `sh ./mvnw clean package`.
+Tests use test-scoped stubs and need no Azure access or model credentials. On macOS/Linux, use `sh ./mvnw clean package`.
 
 **Live tests make paid calls.** The [verification guide](docs/operations.md#verification) covers the API smoke test and the Playwright MCP suites for all eight patterns, desktop/mobile layouts, routing branches, cache behavior, and input validation.
 
@@ -160,7 +159,8 @@ Java tests use test-scoped stubs and need no Azure access or model credentials. 
 | [PatternAgents.java](src/main/java/com/example/tokenpatterns/agent/PatternAgents.java) | AI prompts and deterministic agents |
 | [PatternRunner.java](src/main/java/com/example/tokenpatterns/service/PatternRunner.java) | Workflow composition and measurements |
 | [TraceCollector.java](src/main/java/com/example/tokenpatterns/service/TraceCollector.java) | Per-invocation provider usage and trace |
-| [OfficialSdkChatModel.java](src/main/java/com/example/tokenpatterns/agent/OfficialSdkChatModel.java) | Typed SDK requests, cache controls, and response usage |
+| [OfficialSdkChatModel.java](src/main/java/com/example/tokenpatterns/agent/OfficialSdkChatModel.java) | Typed Responses API requests, cache controls, and response usage |
+| [CacheInstructions.java](src/main/java/com/example/tokenpatterns/agent/CacheInstructions.java) | The exact cached instructions for each browser session |
 | [index.html](src/main/resources/static/index.html) | Dependency-free workshop UI |
 | [infra/](infra) | Azure resources and deployment configuration |
 

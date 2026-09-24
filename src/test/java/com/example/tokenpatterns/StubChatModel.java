@@ -13,7 +13,9 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /** Deterministic stand-in so tests exercise the real orchestration without model credentials. */
@@ -24,6 +26,9 @@ public final class StubChatModel implements ChatModel {
     public static final String CACHE_HIT_FIXTURE = "CACHE_HIT_FIXTURE";
     public static final String CACHE_UNKNOWN_FIXTURE = "CACHE_UNKNOWN_FIXTURE";
     public static final String CACHE_WRITE_UNKNOWN_FIXTURE = "CACHE_WRITE_UNKNOWN_FIXTURE";
+
+    // Static because the stub catalog creates new model instances per run; tests run sequentially.
+    private static final AtomicReference<List<ChatMessage>> LAST_CACHEABLE_MESSAGES = new AtomicReference<>(List.of());
 
     private final String modelName;
     private final boolean cacheEnabled;
@@ -37,11 +42,19 @@ public final class StubChatModel implements ChatModel {
         this.cacheEnabled = cacheEnabled;
     }
 
+    /** The messages of the most recent cache answerer request, exactly as the model received them. */
+    public static List<ChatMessage> lastCacheableMessages() {
+        return LAST_CACHEABLE_MESSAGES.get();
+    }
+
     @Override
     public ChatResponse doChat(ChatRequest request) {
         String prompt = request.messages().stream()
                 .map(StubChatModel::textOf)
                 .collect(Collectors.joining("\n"));
+        if (prompt.contains("[CACHEABLE_ANSWER]")) {
+            LAST_CACHEABLE_MESSAGES.set(List.copyOf(request.messages()));
+        }
 
         if (prompt.contains(RATE_LIMIT_TRIGGER)) {
             throw new RateLimitException("Requests to the ChatCompletions_Create Operation have exceeded rate limit");

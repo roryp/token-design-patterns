@@ -1,5 +1,6 @@
 package com.example.tokenpatterns.web;
 
+import com.example.tokenpatterns.agent.CacheInstructions;
 import com.example.tokenpatterns.agent.ModelCatalog;
 import com.example.tokenpatterns.domain.ModelOutputLimitException;
 import com.example.tokenpatterns.domain.PatternDefinition;
@@ -18,8 +19,6 @@ import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.exception.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -31,6 +30,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
@@ -51,11 +51,14 @@ public class PatternController {
     private final PatternCatalog catalog;
     private final PatternRunner runner;
     private final ModelCatalog models;
+    private final CacheInstructions cacheInstructions;
 
-    public PatternController(PatternCatalog catalog, PatternRunner runner, ModelCatalog models) {
+    public PatternController(PatternCatalog catalog, PatternRunner runner, ModelCatalog models,
+                             CacheInstructions cacheInstructions) {
         this.catalog = catalog;
         this.runner = runner;
         this.models = models;
+        this.cacheInstructions = cacheInstructions;
     }
 
     @GetMapping("/patterns")
@@ -76,12 +79,13 @@ public class PatternController {
         return runner.run(request);
     }
 
+    /** The exact system instructions the caching agent sends for this session, including its session line. */
     @GetMapping("/cache-policy")
-    public ResponseEntity<Resource> cachePolicy() {
+    public ResponseEntity<String> cachePolicy(@RequestParam(required = false) String session) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noCache())
                 .contentType(new MediaType("text", "plain", StandardCharsets.UTF_8))
-                .body(new ClassPathResource("prompts/cache-policy.txt"));
+                .body(cacheInstructions.forSession(session));
     }
 
     @DeleteMapping("/cache")

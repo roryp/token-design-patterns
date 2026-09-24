@@ -1,5 +1,6 @@
 package com.example.tokenpatterns.service;
 
+import com.example.tokenpatterns.agent.CacheInstructions;
 import com.example.tokenpatterns.agent.ModelCatalog;
 import com.example.tokenpatterns.agent.ModelCatalog.ModelSet;
 import com.example.tokenpatterns.agent.PatternAgents.ArchitectureSpecialist;
@@ -55,16 +56,19 @@ public class PatternRunner {
 
     private final PatternCatalog catalog;
     private final ModelCatalog modelCatalog;
+    private final CacheInstructions cacheInstructions;
     private final ExecutorService batchExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public PatternRunner(PatternCatalog catalog, ModelCatalog modelCatalog) {
+    public PatternRunner(PatternCatalog catalog, ModelCatalog modelCatalog, CacheInstructions cacheInstructions) {
         this.catalog = catalog;
         this.modelCatalog = modelCatalog;
+        this.cacheInstructions = cacheInstructions;
     }
 
     public PatternRunResult run(PatternRunRequest request) {
         PatternDefinition definition = catalog.get(request.patternId());
         List<String> batchItems = "batching".equals(definition.id()) ? splitBatch(request.input()) : List.of();
+        String instructions = "caching".equals(definition.id()) ? cacheInstructions.forSession(request.cacheSession()) : null;
         TraceCollector trace = new TraceCollector(definition);
         ModelSet models = trace.instrument(modelCatalog.models());
         long startedAt = System.nanoTime();
@@ -76,7 +80,7 @@ public class PatternRunner {
             case "rag" -> runRag(request.input(), models, trace);
             case "tool-use" -> runToolUse(request.input(), models, trace);
             case "step-back" -> runStepBack(request.input(), models, trace);
-            case "caching" -> runCaching(request.input(), request.providerCacheEnabled(), models, trace);
+            case "caching" -> runCaching(request.input(), instructions, request.providerCacheEnabled(), models, trace);
             case "batching" -> runBatching(batchItems, models, trace);
             default -> throw new IllegalArgumentException("Unsupported pattern: " + definition.id());
         };
@@ -86,7 +90,8 @@ public class PatternRunner {
         int baselineTokens = projectedBaseline(definition.id(), observedTokens, outcome, request.input());
         int avoidedTokens = Math.max(0, baselineTokens - observedTokens);
         int savingsPercent = baselineTokens == 0 ? 0 : (int) Math.round(avoidedTokens * 100.0 / baselineTokens);
-        String cacheStatus = trace.cacheStatus("caching".equals(definition.id()) && request.providerCacheEnabled());
+        boolean cacheEnabled = "caching".equals(definition.id()) && request.providerCacheEnabled();
+        String cacheStatus = trace.cacheStatus(cacheEnabled);
 
         Metrics metrics = new Metrics(
                 baselineTokens,
@@ -102,6 +107,7 @@ public class PatternRunner {
                 trace.cachedInputTokens(),
                 trace.cacheWriteTokens(),
                 trace.reasoningTokens(),
+                cacheEnabled,
                 cacheStatus,
                 measurementBasis(definition.id()));
 
@@ -236,9 +242,11 @@ public class PatternRunner {
         return invoke(workflow, Map.of("request", request));
     }
 
-    private RunOutcome runCaching(String request, boolean cacheEnabled, ModelSet models, TraceCollector trace) {
+    private RunOutcome runCaching(String request, String instructions, boolean cacheEnabled,
+                                  ModelSet models, TraceCollector trace) {
         CacheableAnswerer answerer = AgenticServices.agentBuilder(CacheableAnswerer.class)
                 .chatModel(cacheEnabled ? models.cachedMedium() : models.medium())
+                .systemMessageProvider(ignored -> instructions)
                 .build();
 
         UntypedAgent workflow = AgenticServices.sequenceBuilder()

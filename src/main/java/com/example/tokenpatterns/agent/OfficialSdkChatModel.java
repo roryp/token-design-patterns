@@ -2,17 +2,22 @@ package com.example.tokenpatterns.agent;
 
 import com.example.tokenpatterns.domain.ModelOutputLimitException;
 import com.openai.client.OpenAIClient;
+import com.openai.core.JsonField;
 import com.openai.errors.OpenAIServiceException;
 import com.openai.models.ResponseFormatText;
-import com.openai.models.chat.completions.ChatCompletion;
-import com.openai.models.chat.completions.ChatCompletionAssistantMessageParam;
-import com.openai.models.chat.completions.ChatCompletionContentPart;
-import com.openai.models.chat.completions.ChatCompletionContentPartText;
-import com.openai.models.chat.completions.ChatCompletionCreateParams;
-import com.openai.models.chat.completions.ChatCompletionCreateParams.PromptCacheOptions;
-import com.openai.models.chat.completions.ChatCompletionSystemMessageParam;
-import com.openai.models.chat.completions.ChatCompletionUserMessageParam;
-import com.openai.models.completions.CompletionUsage;
+import com.openai.models.ResponsesModel;
+import com.openai.models.responses.EasyInputMessage;
+import com.openai.models.responses.Response;
+import com.openai.models.responses.ResponseCreateParams;
+import com.openai.models.responses.ResponseCreateParams.PromptCacheOptions;
+import com.openai.models.responses.ResponseInputContent;
+import com.openai.models.responses.ResponseInputItem;
+import com.openai.models.responses.ResponseInputText;
+import com.openai.models.responses.ResponseOutputItem;
+import com.openai.models.responses.ResponseOutputMessage;
+import com.openai.models.responses.ResponseStatus;
+import com.openai.models.responses.ResponseTextConfig;
+import com.openai.models.responses.ResponseUsage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -34,12 +39,16 @@ import dev.langchain4j.model.output.FinishReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
- * The lab's stateless text transport. Client ownership belongs to {@link ModelCatalog};
- * every invocation builds its own immutable SDK request.
+ * The lab's stateless text transport over the Responses API. Client ownership belongs to {@link ModelCatalog};
+ * every invocation builds its own immutable SDK request and asks the service not to store it.
+ * Azure reliably serves a prefix written by one Responses request to the next request with the same
+ * prompt cache key, which Chat Completions requests spread across replicas did not.
  */
 public final class OfficialSdkChatModel implements ChatModel {
 
@@ -49,7 +58,7 @@ public final class OfficialSdkChatModel implements ChatModel {
     }
 
     private static final String PROMPT_CACHE_KEY = "tokenflow-policy-v1";
-    private static final int MAX_COMPLETION_TOKENS = 2000;
+    private static final int MAX_OUTPUT_TOKENS = 2000;
     private static final Logger LOGGER = LoggerFactory.getLogger(OfficialSdkChatModel.class);
 
     private final OpenAIClient client;
@@ -66,8 +75,8 @@ public final class OfficialSdkChatModel implements ChatModel {
         this.cacheMode = Objects.requireNonNull(cacheMode, "cacheMode");
         this.defaults = ChatRequestParameters.builder()
                 .modelName(deployment)
-                // The budget includes reasoning tokens, just as in the previous transport.
-                .maxOutputTokens(MAX_COMPLETION_TOKENS)
+                // The budget includes reasoning tokens.
+                .maxOutputTokens(MAX_OUTPUT_TOKENS)
                 .build();
     }
 
@@ -90,10 +99,10 @@ public final class OfficialSdkChatModel implements ChatModel {
 
     @Override
     public ChatResponse doChat(ChatRequest request) {
-        ChatCompletionCreateParams params = toSdkRequest(request);
-        ChatCompletion completion;
+        ResponseCreateParams params = toSdkRequest(request);
+        Response response;
         try {
-            completion = client.chat().completions().create(params);
+            response = client.responses().create(params);
         } catch (OpenAIServiceException exception) {
             // Do not retain SDK messages, bodies or causes: they can contain credentials/prompts.
             if (exception.statusCode() == 429) {
@@ -105,17 +114,18 @@ public final class OfficialSdkChatModel implements ChatModel {
             LOGGER.warn("Azure OpenAI request failed: errorType={}", exception.getClass().getSimpleName());
             throw new LangChain4jException("Azure OpenAI request could not be completed");
         }
-        return fromSdkResponse(completion);
+        return fromSdkResponse(response);
     }
 
-    private ChatCompletionCreateParams toSdkRequest(ChatRequest request) {
+    private ResponseCreateParams toSdkRequest(ChatRequest request) {
         ChatRequestParameters parameters = request.parameters();
         validateParameters(parameters);
         var options = PromptCacheOptions.builder().mode(PromptCacheOptions.Mode.EXPLICIT);
-        var builder = ChatCompletionCreateParams.builder()
+        var builder = ResponseCreateParams.builder()
                 .model(deployment)
-                .maxCompletionTokens(parameters.maxOutputTokens() == null
-                        ? MAX_COMPLETION_TOKENS : parameters.maxOutputTokens());
+                .store(false)
+                .maxOutputTokens(parameters.maxOutputTokens() == null
+                        ? MAX_OUTPUT_TOKENS : parameters.maxOutputTokens());
         boolean caching = cacheMode == PromptCacheMode.CACHE_SYSTEM_PREFIX;
         if (caching) {
             if (!(request.messages().getFirst() instanceof SystemMessage)
@@ -128,69 +138,57 @@ public final class OfficialSdkChatModel implements ChatModel {
         }
         // EXPLICIT without any breakpoint bypasses the provider cache, rather than using implicit caching.
         builder.promptCacheOptions(options.build());
+        List<ResponseInputItem> input = new ArrayList<>();
         for (ChatMessage message : request.messages()) {
             if (message instanceof SystemMessage system) {
-                var text = ChatCompletionContentPartText.builder().text(system.text());
+                var text = ResponseInputText.builder().text(system.text());
                 if (caching) {
-                    text.promptCacheBreakpoint(
-                            ChatCompletionContentPartText.PromptCacheBreakpoint.builder().build());
+                    text.promptCacheBreakpoint(ResponseInputText.PromptCacheBreakpoint.builder().build());
                 }
-                builder.addMessage(ChatCompletionSystemMessageParam.builder()
-                        .content(ChatCompletionSystemMessageParam.Content.ofArrayOfContentParts(
-                                List.of(text.build())))
-                        .build());
+                input.add(message(EasyInputMessage.Role.SYSTEM,
+                        EasyInputMessage.Content.ofResponseInputMessageContentList(
+                                List.of(ResponseInputContent.ofInputText(text.build())))));
             } else if (message instanceof UserMessage user) {
-                if (!user.attributes().isEmpty()
+                if (user.name() != null || !user.attributes().isEmpty()
                         || user.contents().stream().anyMatch(content -> !(content instanceof TextContent))) {
-                    throw new IllegalArgumentException("Official SDK transport supports only text user messages");
+                    throw new IllegalArgumentException(
+                            "Official SDK transport supports only unnamed text user messages");
                 }
-                var userBuilder = ChatCompletionUserMessageParam.builder();
-                if (user.hasSingleText()) {
-                    userBuilder.content(user.singleText());
-                } else {
-                    userBuilder.content(ChatCompletionUserMessageParam.Content.ofArrayOfContentParts(
-                            user.contents().stream()
-                                    .map(content -> ChatCompletionContentPart.ofText(
-                                            ChatCompletionContentPartText.builder()
-                                                    .text(((TextContent) content).text()).build()))
-                                    .toList()));
-                }
-                if (user.name() != null) {
-                    userBuilder.name(user.name());
-                }
-                builder.addMessage(userBuilder.build());
+                input.add(message(EasyInputMessage.Role.USER, user.hasSingleText()
+                        ? EasyInputMessage.Content.ofTextInput(user.singleText())
+                        : EasyInputMessage.Content.ofResponseInputMessageContentList(user.contents().stream()
+                                .map(content -> ResponseInputContent.ofInputText(ResponseInputText.builder()
+                                        .text(((TextContent) content).text()).build()))
+                                .toList())));
             } else if (message instanceof AiMessage assistant) {
                 if (assistant.hasToolExecutionRequests() || !assistant.images().isEmpty()
                         || assistant.thinking() != null || !assistant.attributes().isEmpty()
                         || assistant.text() == null || assistant.text().isBlank()) {
                     throw new IllegalArgumentException("Official SDK transport supports only text assistant messages");
                 }
-                builder.addMessage(ChatCompletionAssistantMessageParam.builder()
-                        .content(assistant.text()).build());
+                input.add(message(EasyInputMessage.Role.ASSISTANT,
+                        EasyInputMessage.Content.ofTextInput(assistant.text())));
             } else {
                 throw new IllegalArgumentException(
                         "Official SDK transport supports only system, user and assistant text messages");
             }
         }
+        builder.inputOfResponse(input);
         if (parameters.temperature() != null) {
             builder.temperature(parameters.temperature());
         }
         if (parameters.topP() != null) {
             builder.topP(parameters.topP());
         }
-        if (parameters.frequencyPenalty() != null) {
-            builder.frequencyPenalty(parameters.frequencyPenalty());
-        }
-        if (parameters.presencePenalty() != null) {
-            builder.presencePenalty(parameters.presencePenalty());
-        }
-        if (parameters.stopSequences() != null && !parameters.stopSequences().isEmpty()) {
-            builder.stopOfStrings(parameters.stopSequences());
-        }
         if (parameters.responseFormat() != null) {
-            builder.responseFormat(ResponseFormatText.builder().build());
+            builder.text(ResponseTextConfig.builder().format(ResponseFormatText.builder().build()).build());
         }
         return builder.build();
+    }
+
+    private static ResponseInputItem message(EasyInputMessage.Role role, EasyInputMessage.Content content) {
+        return ResponseInputItem.ofEasyInputMessage(EasyInputMessage.builder()
+                .type(EasyInputMessage.Type.MESSAGE).role(role).content(content).build());
     }
 
     private void validateParameters(ChatRequestParameters parameters) {
@@ -202,6 +200,11 @@ public final class OfficialSdkChatModel implements ChatModel {
         }
         if (parameters.topK() != null) {
             throw new IllegalArgumentException("Official SDK transport does not support topK");
+        }
+        if (parameters.frequencyPenalty() != null || parameters.presencePenalty() != null
+                || (parameters.stopSequences() != null && !parameters.stopSequences().isEmpty())) {
+            throw new IllegalArgumentException(
+                    "The Responses API does not support frequency or presence penalties or stop sequences");
         }
         if ((parameters.toolSpecifications() != null && !parameters.toolSpecifications().isEmpty())
                 || parameters.toolChoice() != null) {
@@ -217,53 +220,47 @@ public final class OfficialSdkChatModel implements ChatModel {
         }
     }
 
-    private static ChatResponse fromSdkResponse(ChatCompletion completion) {
+    private static ChatResponse fromSdkResponse(Response response) {
         try {
-            if (completion == null) {
+            if (response == null) {
                 throw new LangChain4jException("Azure OpenAI returned no response");
             }
-            completion.validate();
-            if (completion.id().isBlank() || completion.model().isBlank()
-                    || completion.choices().size() != 1 || completion.choices().getFirst().index() != 0) {
+            ResponseStatus status = response.status()
+                    .orElseThrow(() -> new LangChain4jException("Azure OpenAI returned no response status"));
+            if (ResponseStatus.INCOMPLETE.equals(status)) {
+                var reason = response.incompleteDetails().flatMap(Response.IncompleteDetails::reason).orElse(null);
+                if (Response.IncompleteDetails.Reason.MAX_OUTPUT_TOKENS.equals(reason)) {
+                    throw new ModelOutputLimitException();
+                }
+                if (Response.IncompleteDetails.Reason.CONTENT_FILTER.equals(reason)) {
+                    throw new ContentFilteredException("Azure OpenAI blocked the response with its content filter");
+                }
+                throw new LangChain4jException("Azure OpenAI returned an incomplete response");
+            }
+            if (!ResponseStatus.COMPLETED.equals(status) || response.error().isPresent()) {
+                throw new LangChain4jException("Azure OpenAI did not complete the response");
+            }
+            String model = modelName(response.model());
+            if (response.id().isBlank() || model.isBlank()) {
                 throw new LangChain4jException("Azure OpenAI returned invalid response metadata");
             }
-            var choice = completion.choices().getFirst();
-            FinishReason finishReason = switch (choice.finishReason().value()) {
-                case STOP -> FinishReason.STOP;
-                case LENGTH -> throw new ModelOutputLimitException();
-                case CONTENT_FILTER -> throw new ContentFilteredException(
-                        "Azure OpenAI blocked the response with its content filter");
-                default -> throw new LangChain4jException("Azure OpenAI returned an unsupported finish reason");
-            };
-            var message = choice.message();
-            if (message.refusal().isPresent()) {
-                throw new LangChain4jException("Azure OpenAI refused the request");
-            }
-            if (message.audio().isPresent() || message.functionCall().isPresent()
-                    || message.toolCalls().filter(calls -> !calls.isEmpty()).isPresent()) {
-                throw new LangChain4jException("Azure OpenAI returned unsupported non-text content");
-            }
-            String text = message.content().filter(content -> !content.isBlank())
-                    .orElseThrow(() -> new LangChain4jException("Azure OpenAI returned empty text content"));
-            CompletionUsage usage = completion.usage()
+            String text = outputText(response.output());
+            ResponseUsage usage = response.usage()
                     .orElseThrow(() -> new LangChain4jException("Azure OpenAI returned no token usage"));
-            var promptDetails = usage.promptTokensDetails();
-            var outputDetails = usage.completionTokensDetails();
+            var inputDetails = reported(usage._inputTokensDetails());
+            var outputDetails = reported(usage._outputTokensDetails());
             var tokenUsage = new ProviderTokenUsage(
-                    Math.toIntExact(usage.promptTokens()),
-                    Math.toIntExact(usage.completionTokens()),
+                    Math.toIntExact(usage.inputTokens()),
+                    Math.toIntExact(usage.outputTokens()),
                     Math.toIntExact(usage.totalTokens()),
-                    promptDetails.flatMap(CompletionUsage.PromptTokensDetails::cachedTokens)
-                            .map(Math::toIntExact).orElse(null),
-                    promptDetails.flatMap(CompletionUsage.PromptTokensDetails::cacheWriteTokens)
-                            .map(Math::toIntExact).orElse(null),
-                    outputDetails.flatMap(CompletionUsage.CompletionTokensDetails::reasoningTokens)
-                            .map(Math::toIntExact).orElse(null));
+                    inputDetails.flatMap(details -> count(details._cachedTokens())).orElse(null),
+                    inputDetails.flatMap(details -> count(details._cacheWriteTokens())).orElse(null),
+                    outputDetails.flatMap(details -> count(details._reasoningTokens())).orElse(null));
             return ChatResponse.builder()
                     .aiMessage(AiMessage.from(text))
-                    .id(completion.id())
-                    .modelName(completion.model())
-                    .finishReason(finishReason)
+                    .id(response.id())
+                    .modelName(model)
+                    .finishReason(FinishReason.STOP)
                     .tokenUsage(tokenUsage)
                     .build();
         } catch (LangChain4jException exception) {
@@ -272,5 +269,65 @@ public final class OfficialSdkChatModel implements ChatModel {
             LOGGER.warn("Azure OpenAI response validation failed: errorType={}", exception.getClass().getSimpleName());
             throw new LangChain4jException("Azure OpenAI returned invalid response data or token usage");
         }
+    }
+
+    /** Reasoning items are skipped; the answer must be exactly one completed message of output text. */
+    private static String outputText(List<ResponseOutputItem> output) {
+        ResponseOutputMessage message = null;
+        for (ResponseOutputItem item : output) {
+            if (item.isReasoning()) {
+                continue;
+            }
+            if (!item.isMessage()) {
+                throw new LangChain4jException("Azure OpenAI returned unsupported non-text content");
+            }
+            if (message != null) {
+                throw new LangChain4jException("Azure OpenAI returned invalid response metadata");
+            }
+            message = item.asMessage();
+        }
+        if (message == null || !ResponseOutputMessage.Status.COMPLETED.equals(message.status())) {
+            throw new LangChain4jException("Azure OpenAI returned empty text content");
+        }
+        StringBuilder text = new StringBuilder();
+        for (var content : message.content()) {
+            if (content.isRefusal()) {
+                throw new LangChain4jException("Azure OpenAI refused the request");
+            }
+            if (!content.isOutputText()) {
+                throw new LangChain4jException("Azure OpenAI returned unsupported non-text content");
+            }
+            text.append(content.asOutputText().text());
+        }
+        if (text.toString().isBlank()) {
+            throw new LangChain4jException("Azure OpenAI returned empty text content");
+        }
+        return text.toString();
+    }
+
+    private static String modelName(ResponsesModel model) {
+        if (model.isString()) {
+            return model.asString();
+        }
+        if (model.isChat()) {
+            return model.asChat().asString();
+        }
+        if (model.isOnly()) {
+            return model.asOnly().asString();
+        }
+        throw new LangChain4jException("Azure OpenAI returned invalid response metadata");
+    }
+
+    /** A missing or null provider value is unknown; a present value of the wrong type is invalid. */
+    private static <T> Optional<T> reported(JsonField<T> field) {
+        if (field.isMissing() || field.isNull()) {
+            return Optional.empty();
+        }
+        return Optional.of(field.asKnown().orElseThrow(
+                () -> new IllegalStateException("Azure OpenAI returned a malformed usage counter")));
+    }
+
+    private static Optional<Integer> count(JsonField<Long> field) {
+        return reported(field).map(Math::toIntExact);
     }
 }

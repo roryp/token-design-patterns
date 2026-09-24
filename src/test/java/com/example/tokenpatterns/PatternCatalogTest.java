@@ -30,23 +30,13 @@ class PatternCatalogTest {
     }
 
     @Test
-    void cachingShowsBothProviderOutcomesButNeverSkipsTheModel() {
+    void cachingIsOneChainWhereEveryTestReachesTheModel() {
         var caching = new PatternCatalog().get("caching");
         assertThat(caching.nodes()).extracting(node -> node.id())
-                .containsExactly("input", "cache", "hit", "miss", "model", "output");
-        assertThat(caching.edges()).anySatisfy(edge -> {
-            assertThat(edge.from()).isEqualTo("hit");
-            assertThat(edge.to()).isEqualTo("model");
-        }).anySatisfy(edge -> {
-            assertThat(edge.from()).isEqualTo("miss");
-            assertThat(edge.to()).isEqualTo("model");
-        }).anySatisfy(edge -> {
-            assertThat(edge.from()).isEqualTo("model");
-            assertThat(edge.to()).isEqualTo("cache");
-            assertThat(edge.dashed()).isTrue();
-        });
-        assertThat(caching.edges()).filteredOn(edge -> edge.to().equals("output"))
-                .allSatisfy(edge -> assertThat(edge.from()).isEqualTo("model"));
+                .containsExactly("instructions", "cache", "model", "output");
+        assertThat(caching.edges()).extracting(edge -> edge.from() + "->" + edge.to())
+                .containsExactly("instructions->cache", "cache->model", "model->output");
+        assertThat(caching.edges()).noneSatisfy(edge -> assertThat(edge.dashed()).isTrue());
         assertThat(caching.nodeFor("Cache answerer")).isEqualTo("model");
         assertThat(caching.agentNodes()).hasSize(1);
     }

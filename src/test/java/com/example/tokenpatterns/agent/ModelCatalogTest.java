@@ -8,15 +8,13 @@ import com.openai.azure.AzureUrlPathMode;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.core.LogLevel;
+import com.openai.core.ObjectMappers;
 import com.openai.credential.BearerTokenCredential;
 import com.openai.credential.Credential;
 import com.openai.errors.OpenAIException;
-import com.openai.models.chat.completions.ChatCompletion;
-import com.openai.models.chat.completions.ChatCompletionCreateParams;
-import com.openai.models.chat.completions.ChatCompletionMessage;
-import com.openai.models.completions.CompletionUsage;
-import com.openai.services.blocking.ChatService;
-import com.openai.services.blocking.chat.ChatCompletionService;
+import com.openai.models.responses.Response;
+import com.openai.models.responses.ResponseCreateParams;
+import com.openai.services.blocking.ResponseService;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.LangChain4jException;
@@ -64,18 +62,20 @@ class ModelCatalogTest {
             for (var model : List.of(models.small(), models.medium(), models.large(), models.cachedMedium())) {
                 model.chat(SystemMessage.from("Stable policy prefix"), UserMessage.from("question"));
             }
-            var requests = ArgumentCaptor.forClass(ChatCompletionCreateParams.class);
-            verify(sdk.completions, times(4)).create(requests.capture());
+            var requests = ArgumentCaptor.forClass(ResponseCreateParams.class);
+            verify(sdk.responses, times(4)).create(requests.capture());
             assertEquals(List.of("gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-terra"),
-                    requests.getAllValues().stream().map(params -> params.model().asString()).toList());
+                    requests.getAllValues().stream().map(params -> params.model().orElseThrow().asString()).toList());
             for (int index = 0; index < requests.getAllValues().size(); index++) {
                 var params = requests.getAllValues().get(index);
-                assertEquals(ChatCompletionCreateParams.PromptCacheOptions.Mode.EXPLICIT,
+                assertEquals(ResponseCreateParams.PromptCacheOptions.Mode.EXPLICIT,
                         params.promptCacheOptions().orElseThrow().mode().orElseThrow());
                 assertEquals(index == 3, params.promptCacheKey().isPresent());
-                assertEquals(index == 3, params.messages().getFirst().asSystem().content()
-                        .asArrayOfContentParts().getFirst().promptCacheBreakpoint().isPresent());
-                assertEquals(2000L, params.maxCompletionTokens().orElseThrow());
+                assertEquals(index == 3, params.input().orElseThrow().asResponse().getFirst().asEasyInputMessage()
+                        .content().asResponseInputMessageContentList().getFirst().asInputText()
+                        .promptCacheBreakpoint().isPresent());
+                assertEquals(2000L, params.maxOutputTokens().orElseThrow());
+                assertFalse(params.store().orElseThrow());
                 assertTrue(params.temperature().isEmpty());
             }
             sdk.factory.verify(OpenAIOkHttpClient::builder, times(1));
@@ -242,22 +242,24 @@ class ModelCatalogTest {
     private static final class MockSdk implements AutoCloseable {
         final OpenAIClient client = mock(OpenAIClient.class);
         final OpenAIOkHttpClient.Builder builder = mock(OpenAIOkHttpClient.Builder.class, RETURNS_SELF);
-        final ChatCompletionService completions = mock(ChatCompletionService.class);
+        final ResponseService responses = mock(ResponseService.class);
         final MockedStatic<OpenAIOkHttpClient> factory;
 
         MockSdk() {
-            var response = ChatCompletion.builder()
-                    .id("offline-id").model("provider-revision").created(0)
-                    .addChoice(ChatCompletion.Choice.builder().index(0).finishReason(ChatCompletion.Choice.FinishReason.STOP)
-                            .logprobs(Optional.empty())
-                            .message(ChatCompletionMessage.builder()
-                                    .content("answer").refusal(Optional.empty()).build()).build())
-                    .usage(CompletionUsage.builder().promptTokens(10).completionTokens(2).totalTokens(12).build())
-                    .build();
-            var chat = mock(ChatService.class);
-            when(client.chat()).thenReturn(chat);
-            when(chat.completions()).thenReturn(completions);
-            when(completions.create(any(ChatCompletionCreateParams.class))).thenReturn(response);
+            Response response;
+            try {
+                response = ObjectMappers.jsonMapper().readValue("""
+                        {"id":"offline-id","object":"response","created_at":0,"status":"completed",
+                         "model":"provider-revision",
+                         "output":[{"type":"message","id":"msg-offline","role":"assistant","status":"completed",
+                                    "content":[{"type":"output_text","text":"answer","annotations":[]}]}],
+                         "usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}
+                        """, Response.class);
+            } catch (Exception exception) {
+                throw new AssertionError("Could not read offline response fixture", exception);
+            }
+            when(client.responses()).thenReturn(responses);
+            when(responses.create(any(ResponseCreateParams.class))).thenReturn(response);
             when(builder.build()).thenReturn(client);
             factory = mockStatic(OpenAIOkHttpClient.class);
             factory.when(OpenAIOkHttpClient::builder).thenReturn(builder);

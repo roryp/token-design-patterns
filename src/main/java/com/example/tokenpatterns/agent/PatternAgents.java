@@ -3,7 +3,6 @@ package com.example.tokenpatterns.agent;
 import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.agentic.planner.AgentInstance;
 import dev.langchain4j.service.UserMessage;
-import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.V;
 
 import java.util.ArrayList;
@@ -305,7 +304,6 @@ public final class PatternAgents {
 
     public interface CacheableAnswerer {
 
-        @SystemMessage(fromResource = "/prompts/cache-policy.txt")
         @UserMessage("""
                 [CACHEABLE_ANSWER]
                 REQUEST: {{request}}

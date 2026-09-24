@@ -19,12 +19,9 @@ export async function testPatterns(page, suite = "desktop") {
     if (!condition) throw new Error(message);
   }
 
-  async function submit(id, input, cacheEnabled = true, keyboard = false) {
+  async function submit(id, input, keyboard = false) {
     await page.locator(`.pattern-button[data-pattern-id="${id}"]`).click();
     if (input !== undefined) await page.locator("#promptInput").fill(input);
-    if (id === "caching") {
-      await page.getByLabel("Use provider prompt cache").setChecked(cacheEnabled);
-    }
     const pending = page.waitForResponse(response =>
       response.url().endsWith("/api/runs")
       && response.request().method() === "POST"
@@ -36,7 +33,7 @@ export async function testPatterns(page, suite = "desktop") {
     const response = await pending;
     const data = await response.json();
     await page.waitForFunction(() => !document.querySelector("#runButton").disabled);
-    return { response, data };
+    return { response, data, request: response.request().postDataJSON() };
   }
 
   async function validate(id, result, calls) {
@@ -58,9 +55,7 @@ export async function testPatterns(page, suite = "desktop") {
     check(!(await page.locator("#errorBanner").innerText()), `${id}: unexpected error banner`);
     const graph = await page.locator("#flowSvg").evaluate(svg => ({
       nodes: [...svg.querySelectorAll(".flow-node.visited")].map(node => node.dataset.nodeId),
-      active: svg.querySelectorAll(".active").length,
-      outcome: svg.dataset.cacheOutcome,
-      writes: svg.querySelector('[data-from="model"][data-to="cache"]')?.classList.contains("visited")
+      active: svg.querySelectorAll(".active").length
     }));
     check(graph.nodes.includes("output") && graph.active === 0, `${id}: unfinished animation`);
     for (const event of data.trace.filter(event => event.nodeId)) {
@@ -74,13 +69,37 @@ export async function testPatterns(page, suite = "desktop") {
     if (id !== "caching") {
       check(metrics.cachedInputTokens === 0 && metrics.cacheWriteTokens === 0
         && metrics.cacheStatus === "bypassed", `${id}: unexpected provider cache use`);
-    } else {
-      check(graph.outcome === metrics.cacheStatus, "Cache animation differs from provider status");
-      check(graph.nodes.includes("hit") === (metrics.cacheStatus === "hit"), "Incorrect HIT branch");
-      check(graph.nodes.includes("miss") === ["miss", "miss-written"].includes(metrics.cacheStatus), "Incorrect MISS branch");
-      check(graph.writes === (metrics.cacheWriteTokens > 0), "Incorrect cache-write path");
+      return { metrics, models, graph };
     }
-    return { metrics, models, graph };
+    // Everything the page shows for a cache test must come from this model call's provider usage.
+    const word = { hit: "HIT", "miss-written": "MISS", miss: "MISS", bypassed: "BYPASSED" }[metrics.cacheStatus] ?? "UNKNOWN";
+    const cache = await page.locator('#flowSvg [data-node-id="cache"]').evaluate(node => ({
+      hit: node.classList.contains("cache-hit"),
+      miss: node.classList.contains("cache-miss"),
+      label: node.querySelector(".node-label").textContent
+    }));
+    check(cache.label === word && cache.hit === (word === "HIT") && cache.miss === (word === "MISS"),
+      `Cache node shows ${cache.label}; the provider reported ${metrics.cacheStatus}`);
+    check(["instructions", "cache", "model"].every(node => graph.nodes.includes(node)), "The cache test path was not animated");
+    check(metrics.cacheEnabled === true && models[0].cachedInputTokens === metrics.cachedInputTokens
+      && models[0].cacheWriteTokens === metrics.cacheWriteTokens, "Cache totals differ from the model call");
+    check(await page.locator("#promptInput").isHidden(), "Caching shows a prompt box");
+    const session = await page.locator("#cacheInstructions").getAttribute("data-session");
+    const question = await page.locator("#cacheQuestion").innerText();
+    check(result.request.cacheSession === session, "The test did not send this browser session's instructions");
+    check(question.includes(`“${result.request.input}”`) && data.scope.request === result.request.input,
+      "The test did not send the fixed question shown on the page");
+    const history = await page.locator("#cacheHistory li").allInnerTexts();
+    const test = history.length;
+    check(history.at(-1)?.startsWith(`Test ${test}: ${word}`), "The test history does not show this provider result");
+    check((await page.locator("#flowStatus").innerText()).startsWith(`Test ${test}: ${word}`), "The cache status differs");
+    check(await page.locator("#answerBody .mini-badge", { hasText: `Cache ${word}` }).count() === 1, "The answer badge differs");
+    if (test === 1) {
+      check(metrics.cacheStatus === "miss-written" && metrics.cachedInputTokens === 0 && metrics.cacheWriteTokens >= 1024,
+        `Test 1 of a new session must MISS and write the instructions, but was ${metrics.cacheStatus}`);
+    }
+    if (word === "HIT") check(metrics.cachedInputTokens >= 1024, "A HIT reused fewer than 1,024 tokens");
+    return { metrics, models, graph, test, session };
   }
 
   async function scenario(name, action) {
@@ -137,7 +156,7 @@ export async function testPatterns(page, suite = "desktop") {
       { name: "triage-deep", id: "triage", input: "Design a secure distributed multi-region architecture for a payment system, including migration trade-offs.", calls: 1, node: "deep" }
     ] : []) {
       await scenario(branch.name, async () => {
-        const result = await submit(branch.id, branch.input, true, true);
+        const result = await submit(branch.id, branch.input, true);
         const { metrics, graph } = await validate(branch.id, result, branch.calls);
         check(graph.nodes.includes(branch.node), `Expected branch ${branch.node}`);
         if (branch.id === "triage") {
@@ -150,58 +169,64 @@ export async function testPatterns(page, suite = "desktop") {
     }
 
     if (suite === "cache") {
-      await scenario("shared-system-policy-is-visible", async () => {
+      const sessionPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      let firstSession = "";
+      const cacheTest = ({ test, metrics }) => ({
+        test, cache: metrics.cacheStatus, read: metrics.cachedInputTokens,
+        written: metrics.cacheWriteTokens, input: metrics.inputTokens
+      });
+      await scenario("cache-instructions-without-a-prompt-box", async () => {
         await page.locator('.pattern-button[data-pattern-id="caching"]').click();
-        check(await page.locator("#requestLabel").innerText() === "Your new question (not cached)",
-          "Question and cached instructions are not distinguished");
-        const pending = page.waitForResponse(response => response.url().endsWith("/api/cache-policy"));
+        check(await page.locator("#promptInput").isHidden() && await page.locator("#promptLabel").isHidden(),
+          "Caching still shows a prompt box");
+        check(await page.locator('input[type="checkbox"]').count() === 0, "Caching exposes a bypass switch");
+        check(await page.locator("#runButton").innerText() === "Run cache test 1", "A new session does not start at test 1");
+        check(await page.locator("#cacheResetButton").isVisible(), "Start over is missing");
+        firstSession = await page.locator("#cacheInstructions").getAttribute("data-session");
+        check(sessionPattern.test(firstSession), "The browser session has no cache session id");
+        const pending = page.waitForResponse(response => response.url().includes("/api/cache-policy?session="));
         await page.locator("#cacheInstructions summary").click();
         const response = await pending;
-        check(response.ok(), "Public instruction policy is not available");
-        const policy = await response.text();
-        await page.waitForFunction(() => document.querySelector("#cacheInstructionsText").textContent
-          .startsWith("You are the developer reliability adviser"));
-        check(await page.locator("#cacheInstructionsText").textContent() === policy,
-          "The displayed instructions differ from the served policy");
-        check(policy.includes("IDEMPOTENCY") && policy.includes("PROVIDER PROMPT CACHES"),
-          "The shared reference policy is incomplete");
+        check(response.ok(), "The session instructions are not available");
+        check(decodeURIComponent(response.url().split("session=")[1] ?? "") === firstSession,
+          "Loaded another session's instructions");
+        const text = await response.text();
+        await page.waitForFunction(() => document.querySelector("#cacheInstructionsText").textContent.startsWith("Cache test session "));
+        check(await page.locator("#cacheInstructionsText").textContent() === text,
+          "The dropdown differs from the instructions the server sends to the model");
+        check(text.startsWith(`Cache test session ${firstSession}.`) && text.includes("IDEMPOTENCY")
+          && text.includes("PROVIDER PROMPT CACHES"), "The session instructions are incomplete");
+        return { session: firstSession, characters: text.length };
       });
-      const answers = [];
-      for (const item of [
-        { name: "cache-fresh-rate-limit-question", input: "What does HTTP 429 mean, and what should a client do?", topic: /429|rate limit/i },
-        { name: "cache-fresh-java-question", input: "What is a Java NullPointerException? Give one prevention check.", topic: /NullPointerException|null/i },
-        { name: "cache-fresh-random-text", input: "qxv-73-zebra-cobalt-9102", topic: /./ }
-      ]) {
-        await scenario(item.name, async () => {
-          const result = await submit("caching", item.input);
-          const { metrics } = await validate("caching", result, 1);
-          check(result.data.scope.request === item.input, "The current question was replaced or reused");
-          check(item.topic.test(result.data.output), "Answer does not address the fresh question");
-          check(!answers.includes(result.data.output), "A previous answer was reused for a different input");
-          answers.push(result.data.output);
-          return {
-            cachedPrefixTokens: metrics.cachedInputTokens,
-            uncachedInputTokens: metrics.cachedInputTokens == null ? null : metrics.inputTokens - metrics.cachedInputTokens,
-            written: metrics.cacheWriteTokens,
-            calls: metrics.modelCalls,
-            cache: metrics.cacheStatus
-          };
-        });
-      }
-      await scenario("cache-random-text-with-bypass", async () => {
-        const result = await submit("caching", "qxv-73-zebra-cobalt-9102", false);
-        const { metrics } = await validate("caching", result, 1);
-        check(metrics.cacheStatus === "bypassed" && metrics.cachedInputTokens === 0
-          && metrics.cacheWriteTokens === 0, "Explicit bypass reused provider cache");
+      await scenario("cache-test-1-misses-and-writes", async () => {
+        const run = await validate("caching", await submit("caching"), 1);
+        check(run.test === 1 && run.session === firstSession, "Test 1 did not use the new session");
+        return cacheTest(run);
+      });
+      await scenario("cache-test-2-hits", async () => {
+        const attempts = [];
+        for (let attempt = 2; attempt <= 6; attempt++) {
+          const run = await validate("caching", await submit("caching"), 1);
+          check(run.test === attempt && run.session === firstSession, "The tests did not share one session");
+          attempts.push(cacheTest(run));
+          if (run.metrics.cacheStatus === "hit") return { test2Hit: attempt === 2, hitOnTest: attempt, attempts };
+        }
+        throw new Error(`Azure reported no HIT in tests 2-6: ${JSON.stringify(attempts)}`);
+      });
+      await scenario("cache-start-over-misses-again", async () => {
+        await page.locator("#cacheResetButton").click();
+        const session = await page.locator("#cacheInstructions").getAttribute("data-session");
+        check(sessionPattern.test(session) && session !== firstSession, "Start over kept the old session");
+        check(await page.locator("#cacheHistory li").count() === 0 && await page.locator("#cacheReceipt").isHidden(),
+          "Start over kept old results");
+        check(await page.locator("#runButton").innerText() === "Run cache test 1", "Start over did not restart at test 1");
+        const run = await validate("caching", await submit("caching"), 1);
+        check(run.test === 1 && run.session === session, "The restarted test did not use the new session");
+        return cacheTest(run);
       });
     }
 
     if (suite === "inputs") {
-      await scenario("cache-bypass", async () => {
-        const result = await submit("caching", undefined, false);
-        const { metrics } = await validate("caching", result, 1);
-        check(metrics.cacheStatus === "bypassed", "Cache bypass did not take effect");
-      });
       await scenario("batch-one-item", async () => {
         const input = "Define a token in an LLM.";
         const result = await submit("batching", input);

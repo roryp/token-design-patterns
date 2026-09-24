@@ -12,7 +12,7 @@
 - Keep LangChain4j core (`1.19.0`) and Agentic (`1.19.0-beta29`) versions explicit in `pom.xml`. Agentic is experimental and pinned; change it only as a deliberate compatibility upgrade with tests.
 - Keep `azure-identity` an explicit dependency for the official OpenAI Java SDK's `DefaultAzureCredential` bearer-token integration; remote ACR builds start from an empty dependency cache.
 - Put model construction and agent definitions in `agent`, orchestration and measurements in `service`, API records in `domain`, and HTTP concerns in `web`.
-- The API surface is `GET /api/patterns`, `GET /api/config`, `GET /api/cache-policy`, and `POST /api/runs`. The policy endpoint exposes only the public workshop instructions; never put secrets or private data in that policy. The retired `DELETE /api/cache` returns `410 Gone`, never a claim that Azure's service-managed cache was cleared. `/api/config` returns `modelsConfigured`, `models`, and a literal `agenticVersion` that must be updated whenever the pinned Agentic version changes.
+- The API surface is `GET /api/patterns`, `GET /api/config`, `GET /api/cache-policy`, and `POST /api/runs`. The policy endpoint exposes only the public workshop instructions, optionally with a validated `?session=` line; never put secrets or private data in that policy. The retired `DELETE /api/cache` returns `410 Gone`, never a claim that Azure's service-managed cache was cleared. `/api/config` returns `modelsConfigured`, `models`, and a literal `agenticVersion` that must be updated whenever the pinned Agentic version changes.
 - The browser client is the dependency-free static application in `src/main/resources/static/index.html`; do not introduce a frontend build system unless the task requires it.
 
 ## Agentic Workflow Invariants
@@ -21,7 +21,8 @@
 - The eight pattern ids are `router`, `triage`, `compression`, `rag`, `tool-use`, `step-back`, `caching`, and `batching`. `PatternRunner` dispatches on them and `PatternCatalog` supplies the matching topology, so add or rename them in both places.
 - Keep each request's workflow state and trace isolated. Agent `outputKey` values must match downstream `AgenticScope` inputs.
 - Prefer deterministic Java agents for routing gates, retrieval, and arithmetic when model reasoning is unnecessary.
-- Caching is provider prompt caching, not a local response map: every run calls the model, even on a hit. Only the shared system instruction prefix has a breakpoint; changed or random user questions can legitimately reuse that prefix. Keep cached instructions versus fresh question/answer explicit in the UI. Use typed SDK controls and provider usage; missing telemetry stays unknown, and bypass must not pretend to clear the cache.
+- Model calls go through the official OpenAI Java SDK's Responses API with `store: false`. Keep it: on Azure GlobalStandard GPT-5.6, Responses requests reliably read a prefix written by the previous request, while Chat Completions requests usually did not.
+- Caching is provider prompt caching, not a local response map: every run calls the model, even on a hit. Only the cached system instructions carry a breakpoint; the fixed question and answer are never cached. `CacheInstructions` puts a validated per-browser-session line first so test 1 is a genuine MISS that writes the prefix and test 2 can HIT; the UI has no prompt box for caching and shows the exact instructions sent. Use typed SDK controls and provider usage; missing telemetry stays unknown, and bypass must not pretend to clear the cache.
 - Keep batching bounded and suitable only for independent work. It improves throughput; it does not inherently reduce content tokens.
 
 ## Metrics and Claims

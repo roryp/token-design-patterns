@@ -211,30 +211,22 @@ public class PatternCatalog {
     private static PatternDefinition caching() {
         return new PatternDefinition(
                 "caching", 7, "Caching", "cache", "Provider measured",
-                "Cache shared instructions, not the question you type or the answer you receive.",
-                "Different questions can reuse the same system prefix. Every run sends the fresh question to the model and reads cache usage from the provider response.",
-                "Open the shared instructions above the question. Azure can reuse that fixed prefix even when your question is unrelated or random. The graph replays the provider receipt; Terra always generates a fresh answer, and writes light the return path only when reported.",
-                "Long reusable policies or reference material with many different questions about the same context.",
-                "A prefix hit is not a semantic match or an answer-quality check. Hits are not guaranteed. Cache writes can have a premium; disabling cache bypasses rather than clears provider state.",
+                "Send the same instructions twice: the first test writes Azure's cache, the second reads it.",
+                "Each test sends this browser session's instructions and a fixed question to Terra. HIT or MISS comes from the model response's usage data.",
+                "The instructions end with an explicit prompt-cache breakpoint. Their first line is unique to your browser session, so test 1 is a genuine MISS that writes them to Azure's cache and test 2 can HIT and reuse them.",
+                "Long, stable instructions or reference material shared by many requests.",
+                "Hits are not guaranteed: if Azure reports another MISS, run again. Every test is a real model call with a fresh answer, cached tokens still count as input, and writes can cost more than ordinary input.",
                 "Provider cache reads",
                 "What is idempotency and why does it matter for retries?",
                 List.of(
-                        n("input", "New question", "always sent fresh", "user", 7, 50),
-                        n("cache", "Prompt cache", "shared system instructions", "cache", 30, 50),
-                        n("hit", "HIT", "reuse instruction processing", "cache-hit", 52, 22),
-                        n("miss", "MISS", "no cached input reused", "cache-miss", 52, 75),
-                        n("model", "Terra", "generates a fresh answer", "model-medium", 75, 50),
-                        n("output", "Answer", "new output tokens", "output", 94, 50)),
+                        n("instructions", "Instructions", "this session", "data", 8, 50),
+                        n("cache", "Prompt cache", "awaiting test", "cache", 36, 50),
+                        n("model", "Terra", "every test", "model-medium", 64, 50),
+                        n("output", "Answer", "fresh output", "output", 92, 50)),
                 List.of(
-                        e("input", "cache", "prompt"),
-                        e("cache", "hit", "provider read"),
-                        e("hit", "model", "reuse processing"),
-                        d("cache", "miss", "no read"),
-                        e("miss", "model", "process input"),
-                        e("model", "output", "generate"),
-                        d("model", "cache", "store only when writes are reported"),
-                        d("input", "model", "bypass"),
-                        d("cache", "model", "unknown telemetry")),
+                        e("instructions", "cache", "prefix"),
+                        e("cache", "model", "HIT or MISS"),
+                        e("model", "output", "")),
                 Map.of("Cache answerer", "model"));
     }
 
