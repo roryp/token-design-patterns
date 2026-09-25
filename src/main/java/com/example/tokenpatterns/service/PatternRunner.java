@@ -2,6 +2,7 @@ package com.example.tokenpatterns.service;
 
 import com.example.tokenpatterns.agent.CacheInstructions;
 import com.example.tokenpatterns.agent.ModelCatalog;
+import com.example.tokenpatterns.agent.TokenCostRequest;
 import com.example.tokenpatterns.agent.ModelCatalog.ModelSet;
 import com.example.tokenpatterns.agent.PatternAgents.ArchitectureSpecialist;
 import com.example.tokenpatterns.agent.PatternAgents.BatchWorker;
@@ -69,6 +70,10 @@ public class PatternRunner {
     public PatternRunResult run(PatternRunRequest request) {
         PatternDefinition definition = catalog.get(request.patternId());
         List<String> batchItems = "batching".equals(definition.id()) ? splitBatch(request.input()) : List.of();
+        if ("tool-use".equals(definition.id())) {
+            // The calculator reads the same request; an unreadable one is rejected before any model is initialized.
+            TokenCostRequest.parse(request.input());
+        }
         String instructions = "caching".equals(definition.id()) ? cacheInstructions.forSession(request.cacheSession()) : null;
         TraceCollector trace = new TraceCollector(definition);
         ModelSet models = trace.instrument(modelCatalog.models());

@@ -144,8 +144,8 @@ public class PatternCatalog {
                 List.of(
                         n("input", "Question", "developer query", "user", 6, 50),
                         n("retriever", "Retrieve", "lexical search", "orchestrator", 28, 50),
-                        n("corpus", "Knowledge", "top 2 chunks", "data", 51, 50),
-                        n("generator", "Generate", "grounded model", "model-large", 75, 50),
+                        n("corpus", "Knowledge", "up to 2 chunks", "data", 51, 50),
+                        n("generator", "Generate", "medium model", "model-medium", 75, 50),
                         n("output", "Answer", "from evidence", "output", 94, 50)),
                 List.of(
                         e("input", "retriever", "query"),
@@ -163,7 +163,7 @@ public class PatternCatalog {
                 "tool-use", 5, "Tool use", "tool", "30–50% projected",
                 "Use deterministic computation where language reasoning adds no value.",
                 "A non-AI cost calculator performs exact arithmetic; a model only explains the verified result.",
-                "LangChain4j treats the calculator as a first-class non-AI @Agent inside a sequence workflow.",
+                "LangChain4j runs the calculator as a non-AI @Agent in a sequence workflow. It reads the labeled input and output token counts and both per-million rates; missing, negative, or ambiguous values are rejected before any model call.",
                 "Math, lookups, database operations, APIs, validation, and side-effecting work.",
                 "Tools need typed inputs, timeouts, authorization, and clear failure behavior.",
                 "Reasoning tokens replaced",

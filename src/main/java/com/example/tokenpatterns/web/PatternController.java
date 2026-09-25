@@ -24,6 +24,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +43,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -95,6 +98,28 @@ public class PatternController {
                 "The local response cache has been removed. Azure manages prompt-cache retention; this application cannot clear it. Send cacheEnabled=false to bypass provider caching for a run.");
         problem.setTitle("Provider cache is service-managed");
         problem.setType(URI.create("https://example.com/problems/provider-cache"));
+        return problem;
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ProblemDetail invalidRequest(MethodArgumentNotValidException exception) {
+        // Field names and constraint messages only; rejected values are never echoed back.
+        String detail = exception.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + " " + error.getDefaultMessage())
+                .sorted()
+                .collect(Collectors.joining("; "));
+        return invalid(detail.isEmpty() ? "The request is invalid." : detail + ".");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail unreadableRequest(HttpMessageNotReadableException exception) {
+        return invalid("The request body must be valid JSON: patternId, input, and cacheSession are text, and cacheEnabled is true or false.");
+    }
+
+    private static ProblemDetail invalid(String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        problem.setTitle("Invalid request");
+        problem.setType(URI.create("https://example.com/problems/invalid-request"));
         return problem;
     }
 

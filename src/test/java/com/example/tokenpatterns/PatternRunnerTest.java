@@ -211,6 +211,47 @@ class PatternRunnerTest {
         verifyNoInteractions(models);
     }
 
+    @Test
+    void unreadableCostRequestsAreRejectedBeforeModelsAreInitialized() {
+        ModelCatalog models = mock(ModelCatalog.class);
+        PatternRunner isolated = new PatternRunner(new PatternCatalog(), models, new CacheInstructions());
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> isolated.run(new PatternRunRequest("tool-use",
+                        "Estimate monthly cost for -5M input tokens and 10M output tokens at $0.15/$0.60 per million.")))
+                .withMessageContaining("cannot be negative");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> isolated.run(new PatternRunRequest("tool-use", "Estimate the cost of my chatbot.")))
+                .withMessageContaining("must state an input token count");
+        verifyNoInteractions(models);
+    }
+
+    @Test
+    void theCalculatorReadsThousandsSeparatorsAndTheModelOnlyExplainsTheResult() {
+        PatternRunResult result = runner.run(new PatternRunRequest("tool-use",
+                "Estimate monthly cost for 500,000 input tokens and 100,000 output tokens at $0.15/$0.60 per million."));
+        assertThat(result.scope().get("toolResult"))
+                .isEqualTo("0.5M input × $0.15/M + 0.1M output × $0.60/M = $0.135");
+        assertThat(result.metrics().modelCalls()).isEqualTo(1);
+        assertThat(result.output()).contains("$0.135");
+    }
+
+    @Test
+    void aDefinitionThatMentionsArchitectureTakesTheFastPath() {
+        PatternRunResult result = runner.run(new PatternRunRequest("triage",
+                "What does the word architecture mean? Answer briefly."));
+        assertThat(result.scope().get("complexity")).isEqualTo("SIMPLE");
+        assertThat(result.trace()).extracting(event -> event.agent()).contains("Fast-path responder")
+                .doesNotContain("Deep reasoning responder");
+    }
+
+    @Test
+    void retrievalGroundsParallelQuestionsOnTheParallelEntries() {
+        PatternRunResult result = runner.run(new PatternRunRequest("rag",
+                "How can I execute independent tasks in parallel with LangChain4j agentic workflows?"));
+        assertThat((String) result.scope().get("context")).contains("Parallel mapper", "Parallel workflow")
+                .doesNotContain("Conditional");
+    }
+
     /** Planning adds tokens to the turn it runs in, so no single-turn saving may be claimed. */
     @Test
     void stepBackClaimsNoSingleTurnTokenSaving() {

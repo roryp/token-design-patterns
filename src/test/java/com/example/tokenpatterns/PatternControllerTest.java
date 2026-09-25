@@ -186,6 +186,44 @@ class PatternControllerTest {
     }
 
     @Test
+    void validationFailuresNameTheFieldAndRuleWithoutEchoingTheValue() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"triage","input":"%s"}
+                                """.formatted("a".repeat(12_001))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid request"))
+                .andExpect(jsonPath("$.detail").value("input must be at most 12,000 characters."));
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"","input":"What does HTTP 429 mean?"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("patternId must not be blank."));
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON).content("{\"patternId\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid request"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.startsWith("The request body must be valid JSON")));
+    }
+
+    @Test
+    void unreadableCostRequestsExplainWhatToStateAndCallNoModel() throws Exception {
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"tool-use","input":"Estimate monthly cost for -5M input tokens and 10M output tokens at $0.15/$0.60 per million."}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Token counts and rates cannot be negative."));
+        mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patternId":"tool-use","input":"Estimate monthly cost for 500,000 input tokens and 100,000 output tokens at $0.15/$0.60 per million."}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope.toolResult").value("0.5M input × $0.15/M + 0.1M output × $0.60/M = $0.135"));
+    }
+
+    @Test
     void rejectsEmptyCacheInputAndMalformedCacheOptions() throws Exception {
         mockMvc.perform(post("/api/runs").contentType(MediaType.APPLICATION_JSON)
                         .content("""

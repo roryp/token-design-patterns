@@ -5,16 +5,16 @@ import dev.langchain4j.agentic.planner.AgentInstance;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class PatternAgents {
 
@@ -76,6 +76,21 @@ public final class PatternAgents {
 
     public static final class HeuristicTriage {
 
+        private static final List<Pattern> DOMAIN_TERMS = Stream.of(
+                        "architect", "migrat", "distributed", "secur", "trade-?offs?", "multi-region",
+                        "complian", "failover", "scalab", "incident")
+                .map(term -> Pattern.compile("\\b" + term, Pattern.CASE_INSENSITIVE))
+                .toList();
+        private static final Pattern DESIGN_INTENT = Pattern.compile(
+                "\\b(?:design|recommend|plan|compare|evaluate|strateg|roadmap|migrat|trade-?off|diagnos|root cause|analy[sz])",
+                Pattern.CASE_INSENSITIVE);
+        private static final Pattern DEFINITION = Pattern.compile(
+                "^\\s*(?:what\\s+(?:does|do|is|are)\\b|what's\\b|define\\b|meaning\\s+of\\b|explain\\s+the\\s+(?:term|word)\\b)",
+                Pattern.CASE_INSENSITIVE);
+        private static final Pattern BRIEF = Pattern.compile(
+                "\\b(?:briefly|in\\s+(?:one|a)\\s+(?:sentence|line|word)|one-line|short\\s+answer)\\b",
+                Pattern.CASE_INSENSITIVE);
+
         private final NonAiObserver observer;
 
         public HeuristicTriage() {
@@ -89,14 +104,28 @@ public final class PatternAgents {
         @Agent(name = "Triage gate", description = "Classifies complexity without spending model tokens", outputKey = "complexity")
         public String classify(@V("request") String request) {
             long startedAt = System.nanoTime();
-            String normalized = request.toLowerCase(Locale.ROOT);
-            boolean complex = request.length() > 180
-                    || List.of("architecture", "migration", "distributed", "security", "trade-off", "multi-region")
-                    .stream()
-                    .anyMatch(normalized::contains);
-            String result = complex ? "COMPLEX" : "SIMPLE";
+            String result = complexity(request);
             observer.completed("Triage gate", request, result, elapsedMillis(startedAt));
             return result;
+        }
+
+        /** One keyword is not enough: escalation needs several signals, and short definitions stay simple. */
+        static String complexity(String request) {
+            long domainTerms = DOMAIN_TERMS.stream().filter(term -> term.matcher(request).find()).count();
+            int score = (int) Math.min(2, domainTerms);
+            if (DESIGN_INTENT.matcher(request).find()) {
+                score++;
+            }
+            if (request.length() > 180) {
+                score++;
+            }
+            if (request.length() > 400) {
+                score++;
+            }
+            if (request.length() <= 100 && (DEFINITION.matcher(request).find() || BRIEF.matcher(request).find())) {
+                score -= 2;
+            }
+            return score >= 2 ? "COMPLEX" : "SIMPLE";
         }
     }
 
@@ -152,12 +181,23 @@ public final class PatternAgents {
 
     public static final class LocalKnowledgeRetriever {
 
+        /** Written to the retrieved context when nothing in the knowledge base matches the request. */
+        public static final String NO_RELEVANT_KNOWLEDGE = "No relevant knowledge was found for this request.";
+
         private static final List<KnowledgeChunk> KNOWLEDGE = List.of(
                 new KnowledgeChunk("AgenticScope", "AgenticScope is shared state for one agentic execution. Agent outputs are written under keys and downstream agent arguments read those keys."),
-                new KnowledgeChunk("Conditional workflow", "A conditional workflow activates subagents with predicates over AgenticScope. It is suitable for routing and escalation."),
-                new KnowledgeChunk("Parallel mapper", "Parallel mapper invokes the same stateless subagent once per collection item and aggregates the outputs into a list."),
+                new KnowledgeChunk("Sequential workflow (sequenceBuilder)", "A sequential workflow invokes subagents one after another; each subagent reads earlier outputs from AgenticScope."),
+                new KnowledgeChunk("Conditional workflow (conditionalBuilder)", "A conditional workflow activates subagents with predicates over AgenticScope. It is suitable for routing and escalation."),
+                new KnowledgeChunk("Parallel workflow (parallelBuilder)", "A parallel workflow invokes different, independent subagents concurrently and combines their outputs."),
+                new KnowledgeChunk("Parallel mapper (parallelMapperBuilder)", "A parallel mapper invokes the same stateless subagent concurrently, once per collection item, for independent tasks, and aggregates the outputs into a list."),
                 new KnowledgeChunk("Observability", "AgentListener observes requests, responses, errors, and tool execution. AgentMonitor retains an invocation tree with duration and token usage."),
                 new KnowledgeChunk("Context engineering", "Agentic systems can provide selected or summarized prior-agent context instead of sending every interaction to every model."));
+        private static final Set<String> STOP_WORDS = Set.of(
+                "about", "and", "are", "can", "does", "for", "from", "have", "how", "into", "its", "only", "should",
+                "that", "the", "their", "then", "there", "this", "those", "through", "was", "what", "when", "where",
+                "which", "who", "why", "will", "with", "would", "you", "your");
+        // Terms that appear in fewer chunks carry more weight, so a shared word like "workflow" cannot outrank "parallel".
+        private static final Map<String, Double> WEIGHTS = weights();
 
         private final NonAiObserver observer;
 
@@ -172,14 +212,22 @@ public final class PatternAgents {
         @Agent(name = "Knowledge retriever", description = "Selects only relevant local knowledge chunks", outputKey = "context")
         public String retrieve(@V("request") String request) {
             long startedAt = System.nanoTime();
-            Set<String> queryTerms = terms(request);
-            String result = KNOWLEDGE.stream()
-                    .sorted(Comparator.comparingInt((KnowledgeChunk chunk) -> score(chunk, queryTerms)).reversed())
-                    .limit(2)
-                    .map(chunk -> chunk.title() + ": " + chunk.text())
-                    .collect(Collectors.joining("\n"));
+            String result = retrieveContext(request);
             observer.completed("Knowledge retriever", request, result, elapsedMillis(startedAt));
             return result;
+        }
+
+        /** Up to two chunks that share weighted terms with the request, best first, or a note that none do. */
+        static String retrieveContext(String request) {
+            Set<String> queryTerms = terms(request);
+            String context = KNOWLEDGE.stream()
+                    .map(chunk -> Map.entry(chunk, score(chunk, queryTerms)))
+                    .filter(scored -> scored.getValue() > 0)
+                    .sorted(Map.Entry.<KnowledgeChunk, Double>comparingByValue().reversed())
+                    .limit(2)
+                    .map(scored -> scored.getKey().title() + ": " + scored.getKey().text())
+                    .collect(Collectors.joining("\n"));
+            return context.isEmpty() ? NO_RELEVANT_KNOWLEDGE : context;
         }
 
         public static String fullCorpus() {
@@ -188,21 +236,47 @@ public final class PatternAgents {
                     .collect(Collectors.joining("\n"));
         }
 
-        private static int score(KnowledgeChunk chunk, Set<String> queryTerms) {
-            Set<String> chunkTerms = terms(chunk.title() + " " + chunk.text());
-            int score = 0;
+        private static double score(KnowledgeChunk chunk, Set<String> queryTerms) {
+            Set<String> titleTerms = terms(chunk.title());
+            Set<String> textTerms = terms(chunk.text());
+            double score = 0;
             for (String term : queryTerms) {
-                if (chunkTerms.contains(term)) {
-                    score++;
+                double weight = WEIGHTS.getOrDefault(term, 0.0);
+                if (titleTerms.contains(term)) {
+                    score += 2 * weight;
+                } else if (textTerms.contains(term)) {
+                    score += weight;
                 }
             }
             return score;
         }
 
+        private static Map<String, Double> weights() {
+            Map<String, Integer> chunksWithTerm = new HashMap<>();
+            for (KnowledgeChunk chunk : KNOWLEDGE) {
+                terms(chunk.title() + " " + chunk.text()).forEach(term -> chunksWithTerm.merge(term, 1, Integer::sum));
+            }
+            Map<String, Double> weights = new HashMap<>();
+            chunksWithTerm.forEach((term, count) -> weights.put(term, 1 + Math.log((double) KNOWLEDGE.size() / count)));
+            return Map.copyOf(weights);
+        }
+
+        /** Splits identifiers such as parallelMapperBuilder, drops common words, and folds simple plurals. */
         private static Set<String> terms(String text) {
-            return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^a-z0-9]+"))
-                    .filter(word -> word.length() > 3)
+            return Arrays.stream(text.replaceAll("([a-z0-9])([A-Z])", "$1 $2").toLowerCase(Locale.ROOT).split("[^a-z0-9]+"))
+                    .filter(word -> word.length() >= 3 && !STOP_WORDS.contains(word))
+                    .map(LocalKnowledgeRetriever::singular)
                     .collect(Collectors.toCollection(LinkedHashSet::new));
+        }
+
+        private static String singular(String word) {
+            if (word.length() > 4 && word.endsWith("ies")) {
+                return word.substring(0, word.length() - 3) + "y";
+            }
+            if (word.length() > 3 && word.endsWith("s") && !word.endsWith("ss") && !word.endsWith("us")) {
+                return word.substring(0, word.length() - 1);
+            }
+            return word;
         }
 
         private record KnowledgeChunk(String title, String text) {
@@ -213,7 +287,7 @@ public final class PatternAgents {
 
         @UserMessage("""
                 [RAG_ANSWER]
-                Answer the request using only the retrieved context. Keep the answer concise and developer-focused.
+                Answer the request using only the retrieved context. If the context does not state what the request asks, say so plainly instead of inferring it. Keep the answer concise and developer-focused.
                 RETRIEVED_CONTEXT: {{context}}
                 REQUEST: {{request}}
                 """)
@@ -222,8 +296,6 @@ public final class PatternAgents {
     }
 
     public static final class TokenCostCalculator {
-
-        private static final Pattern NUMBER = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*([mMkK]?)");
 
         private final NonAiObserver observer;
 
@@ -238,31 +310,9 @@ public final class PatternAgents {
         @Agent(name = "Cost calculator", description = "Performs token-cost arithmetic deterministically", outputKey = "toolResult")
         public String calculate(@V("request") String request) {
             long startedAt = System.nanoTime();
-            List<Double> values = new ArrayList<>();
-            Matcher matcher = NUMBER.matcher(request);
-            while (matcher.find()) {
-                double value = Double.parseDouble(matcher.group(1));
-                String suffix = matcher.group(2).toLowerCase(Locale.ROOT);
-                if ("k".equals(suffix)) {
-                    value /= 1_000.0;
-                }
-                values.add(value);
-            }
-
-            double inputMillions = value(values, 0, 50.0);
-            double outputMillions = value(values, 1, 10.0);
-            double inputPrice = value(values, 2, 0.15);
-            double outputPrice = value(values, 3, 0.60);
-            double total = inputMillions * inputPrice + outputMillions * outputPrice;
-
-                String result = "%.2fM input × $%.2f/M + %.2fM output × $%.2f/M = $%.2f".formatted(
-                    inputMillions, inputPrice, outputMillions, outputPrice, total);
-                observer.completed("Cost calculator", request, result, elapsedMillis(startedAt));
-                return result;
-        }
-
-        private static double value(List<Double> values, int index, double fallback) {
-            return index < values.size() ? values.get(index) : fallback;
+            String result = TokenCostRequest.parse(request).describe();
+            observer.completed("Cost calculator", request, result, elapsedMillis(startedAt));
+            return result;
         }
     }
 

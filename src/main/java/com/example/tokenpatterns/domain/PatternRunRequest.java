@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record PatternRunRequest(
         @NotBlank String patternId,
-        @NotBlank @Size(max = 12_000) String input,
+        @NotBlank @Size(max = 12_000, message = "must be at most 12,000 characters") String input,
         Boolean cacheEnabled,
         @Pattern(regexp = PatternRunRequest.CACHE_SESSION_PATTERN, message = "must be a lowercase version 4 UUID")
         String cacheSession) {

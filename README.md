@@ -36,10 +36,10 @@ Each pattern has a sample input, an animated execution graph, and teaching notes
 | Pattern | How it works | Try |
 |---|---|---|
 | **Router** | The small model classifies the request, and only the matching specialist runs | The Java sample, then an architecture question |
-| **Triage** | A Java rule sends simple requests to the small model and complex ones to the large model, at no token cost | The sample, then the complex prompt above |
+| **Triage** | A Java rule sends simple requests to the small model and complex ones to the large model, at no token cost. One keyword is not enough to escalate | The sample, then the complex prompt above |
 | **Context compression** | The small model condenses a long incident history; the large model answers from the summary | The incident sample |
-| **RAG** | Java retrieves the two most relevant local knowledge chunks; the medium model answers from them | The `AgenticScope` sample |
-| **Tool use** | Java does the arithmetic; the small model explains the result | The token-cost sample |
+| **RAG** | Java retrieves up to two relevant local knowledge chunks; the medium model answers from them and says when they don't cover the question | The `AgenticScope` sample |
+| **Tool use** | Java reads the stated token counts and rates and does the arithmetic; the small model explains the result. Unclear requests are rejected, not guessed | The token-cost sample |
 | **Step-back planning** | The small model drafts a short plan and the large model follows it; the plan itself adds tokens | The migration sample |
 | **Caching** | Azure caches long, stable instructions on the first call and reuses them on the next | Cache test 1, then test 2 |
 | **Batching** | One to six independent items, one model call each, run in parallel | The sample, or your own items separated by semicolons or newlines |

@@ -53,6 +53,30 @@ export async function testPatterns(page, suite = "desktop") {
     check(Number((await page.locator("#observedValue").innerText()).replace(/\D/g, ""))
       === metrics.observedTokens, `${id}: displayed usage mismatch`);
     check(!(await page.locator("#errorBanner").innerText()), `${id}: unexpected error banner`);
+    // Markdown must render: no stray code fences, and numbered steps keep the numbers the model wrote.
+    const answer = await page.locator("#answerBody .answer-output").evaluate(output => {
+      const prose = output.cloneNode(true);
+      prose.querySelectorAll("pre, code").forEach(element => element.remove());
+      return {
+        prose: prose.textContent,
+        numbers: [...output.querySelectorAll(":scope > ol > li")]
+          .map(item => item.parentElement.start + [...item.parentElement.children].indexOf(item))
+      };
+    });
+    check(!answer.prose.includes("`"), `${id}: the answer shows raw Markdown backticks`);
+    let fenced = false;
+    const written = data.output.split("\n").flatMap(line => {
+      if (/^\s*```/.test(line)) {
+        fenced = !fenced;
+        return [];
+      }
+      const marker = fenced ? null : line.match(/^(\d{1,9})[.)]\s+/);
+      return marker ? [Number(marker[1])] : [];
+    });
+    if (written.every((number, index) => index === 0 || number === written[index - 1] + 1)) {
+      check(JSON.stringify(answer.numbers) === JSON.stringify(written),
+        `${id}: numbered steps show ${answer.numbers} but the model wrote ${written}`);
+    }
     const graph = await page.locator("#flowSvg").evaluate(svg => ({
       nodes: [...svg.querySelectorAll(".flow-node.visited")].map(node => node.dataset.nodeId),
       active: svg.querySelectorAll(".active").length
@@ -153,16 +177,27 @@ export async function testPatterns(page, suite = "desktop") {
     for (const branch of suite === "branches" ? [
       { name: "router-knowledge", id: "router", input: "Define an LLM token in two sentences.", calls: 2, node: "small" },
       { name: "router-architecture", id: "router", input: "Recommend an architecture for a multi-region payment service with one trade-off and a safe rollout plan.", calls: 2, node: "large" },
-      { name: "triage-deep", id: "triage", input: "Design a secure distributed multi-region architecture for a payment system, including migration trade-offs.", calls: 1, node: "deep" }
+      { name: "triage-deep", id: "triage", input: "Design a secure distributed multi-region architecture for a payment system, including migration trade-offs.", calls: 1, node: "deep" },
+      { name: "triage-definition-stays-simple", id: "triage", input: "What does the word architecture mean? Answer briefly.", calls: 1, node: "fast" },
+      { name: "rag-parallel-grounding", id: "rag", input: "How can I execute independent tasks in parallel with LangChain4j agentic workflows?", calls: 1, node: "generator" }
     ] : []) {
       await scenario(branch.name, async () => {
         const result = await submit(branch.id, branch.input, true);
         const { metrics, graph } = await validate(branch.id, result, branch.calls);
         check(graph.nodes.includes(branch.node), `Expected branch ${branch.node}`);
-        if (branch.id === "triage") {
+        if (branch.node === "deep") {
           check(/decision frame/i.test(result.data.output) && /next step/i.test(result.data.output)
             && /validation/i.test(result.data.output), "Deep triage lost its three-section recommendation");
           check(result.data.output.trim().split(/\s+/).length <= 150, "Deep triage exceeds its 150-word scope");
+        }
+        if (branch.node === "fast") {
+          check(result.data.scope.complexity === "SIMPLE" && !graph.nodes.includes("deep"),
+            "A short definition escalated to the large model");
+        }
+        if (branch.id === "rag") {
+          check(/Parallel mapper/.test(result.data.scope.context) && !/Conditional/.test(result.data.scope.context),
+            "Retrieval did not select the parallel entries");
+          check(/parallel/i.test(result.data.output), "The grounded answer ignores the retrieved parallel entries");
         }
         return { calls: metrics.modelCalls, branch: branch.node };
       });
@@ -250,6 +285,59 @@ export async function testPatterns(page, suite = "desktop") {
           check(await page.locator("#observedValue").innerText() === "—", "Failed run retained old metrics");
         });
       }
+      await scenario("failed-run-clears-previous-evidence", async () => {
+        const run = async input => {
+          await page.locator("#promptInput").fill(input);
+          const pending = page.waitForResponse(response => response.url().endsWith("/api/runs")
+            && response.request().method() === "POST", { timeout: 180000 });
+          await page.locator("#runButton").click();
+          const response = await pending;
+          await page.waitForFunction(() => !document.querySelector("#runButton").disabled);
+          return response;
+        };
+        // Runs on the same pattern without reselecting it, as a presenter would.
+        await page.locator('.pattern-button[data-pattern-id="batching"]').click();
+        check((await run("Define a token in an LLM.")).ok(), "The successful batch failed");
+        check(await page.locator("#scopeSection").evaluate(section => section.classList.contains("visible")),
+          "The successful run showed no AgenticScope");
+        check((await run("one;two;three;four;five;six;seven")).status() === 400, "The invalid batch was accepted");
+        check((await page.locator("#takeawayList").innerText()).trim() === "No results: the run failed.",
+          "The failed run still shows the previous run's results");
+        check(!await page.locator("#scopeSection").evaluate(section => section.classList.contains("visible")),
+          "The failed run still shows the previous run's AgenticScope");
+      });
+      await scenario("tool-use-thousands-separators", async () => {
+        const result = await submit("tool-use",
+          "Estimate monthly cost for 500,000 input tokens and 100,000 output tokens at $0.15/$0.60 per million.");
+        await validate("tool-use", result, 1);
+        check(result.data.scope.toolResult === "0.5M input × $0.15/M + 0.1M output × $0.60/M = $0.135",
+          `The calculator misread the request: ${result.data.scope.toolResult}`);
+        check(/0\.135/.test(result.data.output), "The explanation changed the calculated $0.135");
+      });
+      await scenario("tool-use-negative-count-rejected", async () => {
+        const result = await submit("tool-use",
+          "Estimate monthly cost for -5M input tokens and 10M output tokens at $0.15/$0.60 per million.");
+        check(result.response.status() === 400 && /cannot be negative/.test(result.data.detail),
+          "A negative token count was not rejected");
+        check(/cannot be negative/.test(await page.locator("#errorBanner").innerText()), "The rejection was not shown");
+        check(await page.locator("#observedValue").innerText() === "—", "The rejected request reported usage");
+      });
+      await scenario("oversized-input-message", async () => {
+        await page.locator('.pattern-button[data-pattern-id="triage"]').click();
+        // Automation can bypass the textarea's maxlength; the server must still explain the limit.
+        await page.locator("#promptInput").evaluate(input => {
+          input.value = "a".repeat(12001);
+          input.dispatchEvent(new Event("input"));
+        });
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/runs")
+          && response.request().method() === "POST", { timeout: 60000 });
+        await page.locator("#runButton").click();
+        const response = await pending;
+        await page.waitForFunction(() => !document.querySelector("#runButton").disabled);
+        check(response.status() === 400, "The oversized request was accepted");
+        check((await page.locator("#errorBanner").innerText()).includes("input must be at most 12,000 characters."),
+          "The oversized request showed an unclear message");
+      });
       await scenario("empty-input-feedback", async () => {
         await page.locator('.pattern-button[data-pattern-id="triage"]').click();
         await page.locator("#promptInput").fill("   ");
