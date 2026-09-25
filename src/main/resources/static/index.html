@@ -11,8 +11,8 @@
   </script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Interactive LangChain4j Agentic token design pattern lab" />
-  <title>TokenFlow Lab · LangChain4j Agentic Patterns</title>
+  <meta name="description" content="Interactive lab for token-efficient LLM agent design patterns" />
+  <title>TokenFlow Lab · Agent design patterns</title>
   <style>
     :root {
       color-scheme: light;
@@ -169,7 +169,6 @@
       gap: 8px;
     }
 
-    .status-pill,
     .mini-badge,
     .trace-kind,
     .scope-chip {
@@ -185,13 +184,6 @@
       font-size: 0.7rem;
       font-weight: 650;
       white-space: nowrap;
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--cp-success);
     }
 
     .icon-button {
@@ -1329,10 +1321,6 @@
         gap: 8px;
       }
 
-      .status-pill {
-        display: none;
-      }
-
       .workspace {
         padding: 8px;
       }
@@ -1385,7 +1373,6 @@
       </div>
     </div>
     <div class="header-actions">
-      <span class="status-pill"><i class="status-dot"></i><span id="runtimeStatus">Loading runtime</span></span>
       <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
     </div>
   </header>
@@ -1490,7 +1477,7 @@
               <button class="primary-button" id="runButton" type="button">Run pattern</button>
               <button class="secondary-button" id="cacheResetButton" type="button" hidden>Start over</button>
             </div>
-            <div class="run-note" id="runNote">Each run executes the real LangChain4j Agentic workflow.</div>
+            <div class="run-note" id="runNote" hidden></div>
             <div class="cache-receipt" id="cacheReceipt" hidden>
               <strong>Cache tests in this browser session</strong>
               <ol class="cache-history" id="cacheHistory"></ol>
@@ -1558,9 +1545,6 @@
           <h4><span class="section-index">S</span>AgenticScope</h4>
           <div class="scope-list" id="scopeList"></div>
         </section>
-        <section class="teaching-section">
-          <p>Built with <a href="https://docs.langchain4j.dev/tutorials/agents/" target="_blank" rel="noreferrer">LangChain4j Agentic AI</a> · experimental module.</p>
-        </section>
       </div>
     </aside>
   </main>
@@ -1625,8 +1609,7 @@
       watchOutText: $("#watchOutText"),
       takeawayList: $("#takeawayList"),
       scopeSection: $("#scopeSection"),
-      scopeList: $("#scopeList"),
-      runtimeStatus: $("#runtimeStatus")
+      scopeList: $("#scopeList")
     };
 
     function createElement(tag, className, text) {
@@ -1651,7 +1634,6 @@
         if (!patternsResponse.ok || !configResponse.ok) throw new Error("The application API is not available.");
         state.patterns = await patternsResponse.json();
         state.config = await configResponse.json();
-        elements.runtimeStatus.textContent = `Agentic ${state.config.agenticVersion}`;
         elements.modelSummary.textContent = state.config.models;
         renderPatternList();
         selectPattern(state.patterns[0]?.id);
@@ -1661,7 +1643,6 @@
         }
       } catch (error) {
         showError(error.message);
-        elements.runtimeStatus.textContent = "Runtime unavailable";
       }
     }
 
@@ -1720,7 +1701,8 @@
           ? "Enter one to six independent items, separated by semicolons or newlines. Each item makes one model call."
           : pattern.id === "tool-use"
             ? "State the input and output token counts and both per-million rates. Numbers can use commas and k, M, or B."
-            : "Each run executes the real LangChain4j Agentic workflow.";
+            : "";
+      elements.runNote.hidden = !elements.runNote.textContent;
       elements.teachingTitle.textContent = pattern.name;
       elements.mechanismText.textContent = pattern.mechanism;
       elements.bestForText.textContent = pattern.bestFor;
