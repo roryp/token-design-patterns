@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -320,7 +321,7 @@ public class PatternRunner {
             return "Planning adds tokens to this turn; step-back pays back across avoided retries and rework, which one run cannot measure.";
         }
         if ("caching".equals(patternId)) {
-            return "Provider-reported cache reads and writes are subsets of input tokens. Every run makes a model call and generates a fresh answer; no content-token avoidance or dollar saving is inferred.";
+            return "Azure reports reused and saved tokens as part of the input tokens. Every test calls the model and generates a new answer, so no token saving is claimed.";
         }
         return "Observed run tokens versus a modeled monolithic large-model baseline. Validate the projection with provider telemetry.";
     }
@@ -355,16 +356,22 @@ public class PatternRunner {
                     "Measure rework avoided, retry rate, and completion rate across turns.");
             case "caching" -> List.of(
                     switch (cacheStatus) {
-                        case "hit" -> "The provider reused %d input tokens; cache-write usage is %s.".formatted(
-                                trace.cachedInputTokens(),
-                                trace.cacheWriteTokens() == null ? "unknown" : trace.cacheWriteTokens() + " input tokens");
-                        case "miss-written" -> "The provider wrote %d input tokens but reused none on this call.".formatted(trace.cacheWriteTokens());
-                        case "miss" -> "The provider reported no cache reads or writes. Enabling caching does not guarantee a hit.";
-                        case "bypassed" -> "Caching was explicitly bypassed; the provider reported zero reads and writes.";
-                        default -> "Provider cache telemetry is incomplete; unknown usage is not treated as a miss or zero.";
+                        case "hit" -> trace.cacheWriteTokens() == null
+                                ? "Azure reused %s instruction tokens from its cache; it did not report cache writes, so they are unknown."
+                                        .formatted(count(trace.cachedInputTokens()))
+                                : trace.cacheWriteTokens() == 0
+                                        ? "Azure reused %s instruction tokens from its cache instead of processing them again."
+                                                .formatted(count(trace.cachedInputTokens()))
+                                        : "Azure reused %s instruction tokens from its cache and saved %s more."
+                                                .formatted(count(trace.cachedInputTokens()), count(trace.cacheWriteTokens()));
+                        case "miss-written" -> "Azure had nothing cached, so it processed the instructions in full and saved %s tokens to its cache."
+                                .formatted(count(trace.cacheWriteTokens()));
+                        case "miss" -> "Azure reported no cache reads or writes for this call.";
+                        case "bypassed" -> "Caching was off for this request, so Azure neither read nor saved the instructions.";
+                        default -> "Azure did not report cache usage, so the result is unknown rather than a MISS.";
                     },
-                    "Every run makes a real model call. Only stable instructions are cacheable; the question and generated answer are not reused.",
-                    "Cached input remains in observed token totals. Cache pricing and retention are service-managed; writes can cost more than ordinary input.");
+                    "Terra generated a new answer. Only the instructions can come from the cache, never the question or the answer.",
+                    "Reused tokens still count as input tokens, billed at a lower rate. Saving to the cache can add a charge.");
             case "batching" -> List.of(
                     outcome.concurrency() + " independent items were dispatched through the parallel mapper.",
                     "Concurrency improves elapsed time but does not automatically reduce content tokens.",
@@ -390,6 +397,11 @@ public class PatternRunner {
             return 0;
         }
         return Math.max(1, (int) Math.ceil(text.codePointCount(0, text.length()) / 4.0));
+    }
+
+    // Grouped the way the UI groups numbers, so "1,772" never reads as two numbers.
+    private static String count(Integer tokens) {
+        return String.format(Locale.US, "%,d", tokens);
     }
 
     private record RunOutcome(

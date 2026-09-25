@@ -54,9 +54,9 @@ A [one-page overview](docs/images/tokenflow-patterns-overview.svg) of all eight 
 
 The caching agent sends about 1,770 tokens of instructions that end in an explicit prompt-cache breakpoint, followed by a fixed question. The first line of the instructions is unique to your browser session, so test 1 has nothing to reuse and Azure writes the instructions to its cache. Test 2 sends the same instructions, and Azure reads them back. Only the instructions are cached: every test sends the question again and gets a freshly generated answer.
 
-HIT and MISS come straight from Azure's usage data for each call: `cached_tokens` read and `cache_write_tokens` written. Open **Cached instructions for this browser session** to see exactly what was sent.
+HIT and MISS come straight from Azure's usage data for each call: `cached_tokens` read and `cache_write_tokens` written. Open **Instructions for this browser session** to see exactly what was sent.
 
-[![Cache test 2 on Azure: HIT, reusing the 1,773 instruction tokens that test 1 wrote. The dropdown shows the exact session instructions, and the history shows test 1 MISS, then test 2 HIT](docs/images/tokenflow-provider-cache.png)](docs/images/tokenflow-provider-cache.png)
+[![Cache test 2 on Azure: HIT, reusing the 1,770 instruction tokens that test 1 saved. The dropdown shows the exact session instructions, and the history shows test 1 MISS, then test 2 HIT](docs/images/tokenflow-provider-cache.png)](docs/images/tokenflow-provider-cache.png)
 
 The lab uses the Responses API because Azure served the cached instructions to test 2 in every trial, whereas with Chat Completions test 2 usually missed ([details](docs/operations.md#provider-caching)). A HIT is still Azure's decision; if test 2 ever misses, run test 3.
 
@@ -66,8 +66,8 @@ The lab uses the Responses API because Azure served the cached instructions to t
 |---|---|
 | **Observed** | Input plus output tokens, as reported by Azure |
 | **Modeled baseline** and **Projected saving** | An estimate of what one large-model call with all the context would use; modeled, not measured |
-| **Prefix reused** | For caching, the share of input tokens Azure read from its cache |
-| **Cache writes** | For caching, the input tokens Azure stored for reuse |
+| **Reused from cache** | For caching, the share of input tokens Azure read from its cache |
+| **Saved to cache** | For caching, the input tokens Azure stored for reuse |
 | **Wall time** | End-to-end time for the run |
 | **Agentic steps** | Workflow and agent invocations, including zero-token Java steps |
 

@@ -69,6 +69,8 @@ class PatternRunnerTest {
             assertThat(result.metrics().avoidedTokens()).isZero();
             assertThat(result.metrics().projectedSavingsPercent()).isZero();
             assertThat(result.output()).contains("Idempotency", "idempotency key");
+            assertThat(result.takeaways().getFirst()).matches(
+                    "Azure had nothing cached, so it processed the instructions in full and saved \\d{1,3}(,\\d{3})+ tokens to its cache\\.");
         }
     }
 
@@ -82,6 +84,8 @@ class PatternRunnerTest {
         assertThat(result.metrics().observedTokens()).isGreaterThan(result.metrics().cachedInputTokens());
         assertThat(result.metrics().modelCalls()).isEqualTo(1);
         assertThat(result.metrics().avoidedTokens()).isZero();
+        assertThat(result.takeaways().getFirst()).matches(
+                "Azure reused \\d{1,3}(,\\d{3})+ instruction tokens from its cache instead of processing them again\\.");
     }
 
     @Test
@@ -149,7 +153,7 @@ class PatternRunnerTest {
         assertThat(result.metrics().cachedInputTokens()).isNull();
         assertThat(result.metrics().cacheWriteTokens()).isNull();
         assertThat(result.metrics().reasoningTokens()).isNull();
-        assertThat(result.takeaways().getFirst()).contains("incomplete");
+        assertThat(result.takeaways().getFirst()).contains("unknown").doesNotContain("0 ");
     }
 
     @Test

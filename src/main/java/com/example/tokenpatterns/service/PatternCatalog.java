@@ -210,22 +210,22 @@ public class PatternCatalog {
 
     private static PatternDefinition caching() {
         return new PatternDefinition(
-                "caching", 7, "Caching", "cache", "Provider measured",
-                "Send the same instructions twice: the first test writes Azure's cache, the second reads it.",
-                "Each test sends this browser session's instructions and a fixed question to Terra. HIT or MISS comes from the model response's usage data.",
-                "The instructions end with an explicit prompt-cache breakpoint. Their first line is unique to your browser session, so test 1 is a genuine MISS that writes them to Azure's cache and test 2 can HIT and reuse them.",
+                "caching", 7, "Caching", "cache", "Measured by Azure",
+                "Send the same instructions twice: test 1 saves them in Azure's cache, test 2 reuses them.",
+                "Each test sends this browser session's instructions and a fixed question to Terra. Azure's usage data reports whether the instructions came from its cache.",
+                "The instructions end with a cache breakpoint, which lets Azure cache everything before it. Their first line is unique to your browser session, so test 1 finds nothing cached and saves them; test 2 finds them and reuses them. The question and answer are never cached.",
                 "Long, stable instructions or reference material shared by many requests.",
-                "Hits are not guaranteed: if Azure reports another MISS, run again. Every test is a real model call with a fresh answer, cached tokens still count as input, and writes can cost more than ordinary input.",
-                "Provider cache reads",
+                "A HIT is likely but not guaranteed; if a test misses, run another. Reused tokens still count as input tokens, billed at a lower rate, and saving to the cache can add a charge.",
+                "Azure cache reads",
                 "What is idempotency and why does it matter for retries?",
                 List.of(
                         n("instructions", "Instructions", "this session", "data", 8, 50),
-                        n("cache", "Prompt cache", "awaiting test", "cache", 36, 50),
-                        n("model", "Terra", "every test", "model-medium", 64, 50),
-                        n("output", "Answer", "fresh output", "output", 92, 50)),
+                        n("cache", "Prompt cache", "not checked yet", "cache", 36, 50),
+                        n("model", "Terra", "writes the answer", "model-medium", 64, 50),
+                        n("output", "Answer", "new every test", "output", 92, 50)),
                 List.of(
-                        e("instructions", "cache", "prefix"),
-                        e("cache", "model", "HIT or MISS"),
+                        e("instructions", "cache", ""),
+                        e("cache", "model", ""),
                         e("model", "output", "")),
                 Map.of("Cache answerer", "model"));
     }

@@ -1480,7 +1480,7 @@
           </div>
           <div class="runner-body">
             <details class="cache-instructions" id="cacheInstructions" hidden>
-              <summary>Cached instructions for this browser session</summary>
+              <summary>Instructions for this browser session</summary>
               <pre id="cacheInstructionsText">Open to load the exact instructions.</pre>
             </details>
             <p class="cache-question" id="cacheQuestion" hidden></p>
@@ -1494,7 +1494,7 @@
             <div class="cache-receipt" id="cacheReceipt" hidden>
               <strong>Cache tests in this browser session</strong>
               <ol class="cache-history" id="cacheHistory"></ol>
-              <p>HIT or MISS comes from each model response's cache read and write counts.</p>
+              <p>HIT and MISS come from Azure's usage data for each test.</p>
             </div>
           </div>
         </section>
@@ -1712,10 +1712,10 @@
         ? `Each test sends these instructions and the fixed question “${pattern.sampleInput}”`
         : "";
       elements.cacheResetButton.hidden = !caching;
-      elements.savingsLabel.textContent = caching ? "Prefix reused" : "Projected saving";
-      elements.baselineLabel.textContent = caching ? "Cache writes" : "Modeled baseline";
+      elements.savingsLabel.textContent = caching ? "Reused from cache" : "Projected saving";
+      elements.baselineLabel.textContent = caching ? "Saved to cache" : "Modeled baseline";
       elements.runNote.textContent = caching
-        ? "Every test is a real call to Terra. Start over for new instructions and a new first MISS."
+        ? "Each test is a real call to Terra. Start over for new instructions; the next test will be a MISS."
         : pattern.id === "batching"
           ? "Enter one to six independent items, separated by semicolons or newlines. Each item makes one model call."
           : "Each run executes the real LangChain4j Agentic workflow.";
@@ -1826,11 +1826,12 @@
       if (pattern.id === "caching") {
         const latest = state.cacheTests.at(-1);
         if (state.running) {
-          elements.flowStatus.textContent = `Test ${state.cacheTests.length + 1}: waiting for Azure's usage data…`;
+          elements.flowStatus.textContent = `Test ${state.cacheTests.length + 1}: waiting for Azure…`;
+          svg.querySelector('[data-node-id="cache"] .node-caption').textContent = "checking…";
         } else if (latest) {
           showCacheOutcome(latest);
         } else {
-          elements.flowStatus.textContent = "Test 1 should MISS: these instructions are new to Azure, so it writes them to its cache. Test 2 should HIT and reuse them. Results come from the model's usage data.";
+          elements.flowStatus.textContent = "Nothing is cached for this session yet. Run test 1 to send the instructions to Azure.";
         }
       }
     }
@@ -1876,18 +1877,21 @@
     }
 
     function cacheSentence(test) {
+      const reused = providerCount(test.cached);
+      const saved = providerCount(test.written);
       switch (test.status) {
         case "hit":
-          return `Test ${test.number}: HIT. Azure reused ${providerCount(test.cached)} cached instruction tokens; Terra still generated a fresh answer.`;
+          return `Test ${test.number}: HIT. Azure found these instructions in its cache and reused ${reused} tokens instead of processing them again.`
+            + (test.written > 0 ? ` It also saved ${saved} tokens.` : "");
         case "miss-written":
-          return `Test ${test.number}: MISS. Nothing was reused; Azure wrote ${providerCount(test.written)} instruction tokens to its cache.`
-            + (test.number === 1 ? " Run test 2 to reuse them." : " Hits are not guaranteed; run again.");
+          return `Test ${test.number}: MISS. Azure had nothing cached for these instructions, so it processed them in full and saved ${saved} tokens to its cache.`
+            + (test.number === 1 ? " Run test 2 to reuse them." : " Run another test.");
         case "miss":
-          return `Test ${test.number}: MISS. Azure reported no cache reads or writes. Run again.`;
+          return `Test ${test.number}: MISS. Azure reported no cache reads or writes. Run another test.`;
         case "bypassed":
-          return `Test ${test.number}: caching was bypassed, so Azure reported no cache reads or writes.`;
+          return `Test ${test.number}: BYPASSED. Caching was off, so Azure neither read nor saved the instructions.`;
         default:
-          return `Test ${test.number}: Azure did not report cache usage, so neither HIT nor MISS is shown.`;
+          return `Test ${test.number}: UNKNOWN. Azure didn't report cache usage for this test.`;
       }
     }
 
@@ -1900,7 +1904,7 @@
       node.classList.toggle("cache-miss", word === "MISS");
       node.querySelector(".node-label").textContent = word;
       node.querySelector(".node-caption").textContent = word === "HIT" ? `${providerCount(test.cached)} reused`
-        : test.status === "miss-written" ? `${providerCount(test.written)} written`
+        : test.status === "miss-written" ? `${providerCount(test.written)} saved`
           : word === "MISS" ? "nothing reused" : "not reported";
       node.setAttribute("aria-label", `Prompt cache: ${word} on test ${test.number}`);
     }
@@ -1926,7 +1930,7 @@
         const item = createElement("li", word === "HIT" ? "cache-hit" : word === "MISS" ? "cache-miss" : "");
         item.append(
           createElement("strong", "", `Test ${test.number}: ${word}`),
-          document.createTextNode(` · ${providerCount(test.cached)} reused · ${providerCount(test.written)} written`));
+          document.createTextNode(` · ${providerCount(test.cached)} reused · ${providerCount(test.written)} saved`));
         return item;
       }));
     }
@@ -2285,15 +2289,15 @@
     }
 
     async function animateTrace(trace, runToken) {
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // A cache test is already complete when its result arrives, so its graph shows the final state at once
+      // instead of replaying behind the metrics, answer, and history that the page has already updated.
+      const instant = state.current.id === "caching"
+        || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       let previousNode = "";
       if (state.current.id === "caching" && state.cacheTests.length) {
         activateNode("instructions", "", "completed");
-        if (!reducedMotion) await delay(280);
-        if (runToken !== state.animationToken) return;
         activateNode("cache", "instructions", "completed");
         showCacheOutcome(state.cacheTests.at(-1));
-        if (!reducedMotion) await delay(420);
         previousNode = "cache";
       }
       for (const event of trace) {
@@ -2304,7 +2308,7 @@
           activateNode(event.nodeId, previousNode, event.status);
           previousNode = event.nodeId;
         }
-        if (!reducedMotion) await delay(280);
+        if (!instant) await delay(280);
       }
       if (runToken !== state.animationToken) return;
       finishGraph(previousNode);
@@ -2411,8 +2415,11 @@
       elements.promptInput.removeAttribute("aria-invalid");
     }
 
+    // One grouping style everywhere: a space-grouped "1 772" can read as two numbers.
+    const numberFormat = new Intl.NumberFormat("en-US");
+
     function formatNumber(value) {
-      return new Intl.NumberFormat().format(value);
+      return numberFormat.format(value);
     }
 
     function cssEscape(value) {
