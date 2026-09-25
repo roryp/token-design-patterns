@@ -1,6 +1,6 @@
 # Operations and API reference
 
-[Back to the conference quickstart](../README.md)
+[Back to the README](../README.md)
 
 This guide contains the setup and operational detail behind the live workshop. Examples use PowerShell from the repository root. Read resource names and endpoints from the selected azd environment; do not reuse values from a different deployment.
 

@@ -1,94 +1,83 @@
 # TokenFlow Lab
 
-**Eight agent design patterns. Real model calls. Visible trade-offs.**
-
-An interactive Java workshop about when to call a model, which model to choose, and how much context to send. Run a pattern, watch its graph animate, then inspect the answer, token usage, and agent trace.
+TokenFlow Lab is an interactive workshop for eight LLM agent design patterns: routing, triage, context compression, RAG, tool use, step-back planning, prompt caching, and batching. Each run executes a real [LangChain4j Agentic](https://docs.langchain4j.dev/tutorials/agents/) workflow on Azure OpenAI and shows which models it called, how many tokens they used, and the answer they produced.
 
 **[Open the live lab](https://ca-tokenflow-dev-h4anbfs7yreo6.lemonwave-32f00510.eastus2.azurecontainerapps.io/)** · [Operations and API reference](docs/operations.md)
 
-> Every run calls Azure OpenAI and can incur charges; there is no simulated mode. The hosted lab may be paused between workshops.
+> Every run makes billable Azure OpenAI calls. The live lab may be offline between workshops.
 
-[![TokenFlow Lab showing all eight patterns, a completed triage flow, observed usage, output, and agent trace](docs/images/tokenflow-lab-desktop.png)](docs/images/tokenflow-lab-desktop.png)
-
-*Screenshots are real Azure runs captured on September 24, 2026; select one to enlarge it. Outputs, usage, and latency vary between runs.*
+[![TokenFlow Lab with the pattern list, a completed triage run, its execution graph, token metrics, answer, and agent trace](docs/images/tokenflow-lab-desktop.png)](docs/images/tokenflow-lab-desktop.png)
 
 ## Contents
 
-- [Five-minute tour](#five-minute-tour)
-  - [What the cache demo shows](#what-the-cache-demo-shows)
-- [The eight patterns](#the-eight-patterns)
-- [Read the numbers correctly](#read-the-numbers-correctly)
+- [Quick tour](#quick-tour)
+- [The patterns](#the-patterns)
+- [How the cache test works](#how-the-cache-test-works)
+- [Reading the metrics](#reading-the-metrics)
 - [Run locally](#run-locally)
-  - [Model tiers](#model-tiers)
 - [Deploy to Azure](#deploy-to-azure)
-- [Before you go on stage](#before-you-go-on-stage)
 - [Develop and test](#develop-and-test)
-  - [Where to explore](#where-to-explore)
-- [Operations and API reference](docs/operations.md) (separate guide)
+- [Operations and API reference](docs/operations.md)
 
-## Five-minute tour
+## Quick tour
 
-1. **Triage, fast path.** Keep the sample HTTP 429 question and select **Run Triage**. A Java gate spends zero model tokens, then the small model answers.
-2. **Triage, deep path.** Replace the question with this prompt and run it again. The graph now takes the deep path to the large model.
+Open the [live lab](https://ca-tokenflow-dev-h4anbfs7yreo6.lemonwave-32f00510.eastus2.azurecontainerapps.io/) or [run it locally](#run-locally), then try these four runs:
+
+1. **Triage, simple.** Select **Triage** and run the sample question. A Java rule classifies it without spending tokens, and the small model answers.
+2. **Triage, complex.** Replace the question with this prompt and run it again. This time the large model answers.
 
    ```text
    Design a secure distributed multi-region architecture for a payment system, including migration trade-offs.
    ```
 
-3. **Caching.** Open **Cached instructions for this browser session** to see exactly what Terra receives. **Run cache test 1** is a MISS: Azure writes the instructions to its cache. **Run cache test 2** is a HIT: Azure reuses them. **Start over** gives you new instructions, so the next test misses again.
-4. **Batching.** Run the three supplied items. Three model calls run concurrently, with no automatic content-token savings.
+3. **Caching.** Select **Caching**, then **Run cache test 1** and **Run cache test 2**. Test 1 is a MISS, so Azure caches the instructions; test 2 is a HIT, so Azure reuses them. **Start over** begins with new instructions, and the next test misses again.
+4. **Batching.** Select **Batching** and run the three sample items. They run in parallel: three model calls and less waiting, but no fewer tokens.
 
-### What the cache demo shows
+## The patterns
 
-HIT and MISS are Azure's own usage numbers for each model call: `cached_tokens` read from its prompt cache and `cache_write_tokens` written to it. The first line of the instructions is unique to your browser session, so test 1 has nothing to reuse; test 2 sends the same instructions and reads them back. The question and answer are never cached, and Terra writes a fresh answer every time.
+Each pattern has a sample input, an animated execution graph, and teaching notes.
+
+| Pattern | How it works | Try |
+|---|---|---|
+| **Router** | The small model classifies the request, and only the matching specialist runs | The Java sample, then an architecture question |
+| **Triage** | A Java rule sends simple requests to the small model and complex ones to the large model, at no token cost | The sample, then the complex prompt above |
+| **Context compression** | The small model condenses a long incident history; the large model answers from the summary | The incident sample |
+| **RAG** | Java retrieves the two most relevant local knowledge chunks; the medium model answers from them | The `AgenticScope` sample |
+| **Tool use** | Java does the arithmetic; the small model explains the result | The token-cost sample |
+| **Step-back planning** | The small model drafts a short plan and the large model follows it; the plan itself adds tokens | The migration sample |
+| **Caching** | Azure caches long, stable instructions on the first call and reuses them on the next | Cache test 1, then test 2 |
+| **Batching** | One to six independent items, one model call each, run in parallel | The sample, or your own items separated by semicolons or newlines |
+
+A [one-page overview](docs/images/tokenflow-patterns-overview.svg) of all eight patterns is also available.
+
+## How the cache test works
+
+The caching agent sends about 1,770 tokens of instructions that end in an explicit prompt-cache breakpoint, followed by a fixed question. The first line of the instructions is unique to your browser session, so test 1 has nothing to reuse and Azure writes the instructions to its cache. Test 2 sends the same instructions, and Azure reads them back. Only the instructions are cached: every test sends the question again and gets a freshly generated answer.
+
+HIT and MISS come straight from Azure's usage data for each call: `cached_tokens` read and `cache_write_tokens` written. Open **Cached instructions for this browser session** to see exactly what was sent.
 
 [![Cache test 2 on Azure: HIT, reusing the 1,773 instruction tokens that test 1 wrote. The dropdown shows the exact session instructions, and the history shows test 1 MISS, then test 2 HIT](docs/images/tokenflow-provider-cache.png)](docs/images/tokenflow-provider-cache.png)
 
-The page reports each result exactly as Azure returns it; if test 2 ever misses, run test 3. The lab uses the Responses API because, in our trials, Azure served the cached instructions to test 2 every time, whereas with Chat Completions test 2 usually missed ([details](docs/operations.md#provider-caching)).
+The lab uses the Responses API because Azure served the cached instructions to test 2 in every trial, whereas with Chat Completions test 2 usually missed ([details](docs/operations.md#provider-caching)). A HIT is still Azure's decision; if test 2 ever misses, run test 3.
 
-## The eight patterns
+## Reading the metrics
 
-Each pattern has a built-in sample, an execution graph, and teaching notes.
-
-| Pattern | Try this | What to look for |
-|---|---|---|
-| **Router** | Compare a Java debugging question with an architecture question | Only the selected specialist runs |
-| **Triage** | Compare a routine question with the deep-path prompt above | A zero-token gate picks the small or large model |
-| **Context compression** | Run the incident-analysis sample | A compact working set reaches the larger model |
-| **RAG** | Ask how `AgenticScope` shares state | Two relevant local knowledge chunks ground the answer |
-| **Tool use** | Run the token-cost calculation | Java does the arithmetic; the model explains it |
-| **Step-back planning** | Run the migration-planning sample | A short plan guides the answer; planning itself adds tokens |
-| **Caching** | Run cache test 1, then test 2, then **Start over** | The MISS writes the instructions, the HIT reuses them, and every answer is fresh |
-| **Batching** | Submit one to six independent items, separated by semicolons or newlines | One model call per item, results in order, bounded concurrency |
-
-Empty batches and batches of more than six items are rejected before any model call; work is never invented or silently dropped.
-
-For a longer session, spend two or three minutes on each pattern and ask: **did the answer stay useful, and what did we actually measure?** The [printable pattern overview](docs/images/tokenflow-patterns-overview.svg) helps the discussion.
-
-## Read the numbers correctly
-
-| UI measurement | What it means |
+| Metric | Meaning |
 |---|---|
-| **Observed** | Input plus output tokens reported by the provider |
-| **Modeled baseline / Projected saving** | A modeled comparison, not a measured before-and-after run or a bill |
-| **Prefix reused** | Cached instruction tokens as a share of all input tokens, not a question match or a dollar discount |
-| **Cache writes** | Input stored for later reuse, not a hit on that call |
-| **Reasoning tokens** | Already included in output tokens; do not add them again |
-| **Wall time / Model calls** | Elapsed application time and actual model invocations |
+| **Observed** | Input plus output tokens, as reported by Azure |
+| **Modeled baseline** and **Projected saving** | An estimate of what one large-model call with all the context would use; modeled, not measured |
+| **Prefix reused** | For caching, the share of input tokens Azure read from its cache |
+| **Cache writes** | For caching, the input tokens Azure stored for reuse |
+| **Wall time** | End-to-end time for the run |
+| **Agentic steps** | Workflow and agent invocations, including zero-token Java steps |
 
-**Caching, batching, and step-back planning claim no single-run token savings.** Cache reads can lower processing cost, batching can raise throughput, and planning can avoid later rework, but a savings percentage alone shows none of those. Missing telemetry is shown as unknown, never as zero.
+Reasoning tokens, shown in the trace, are part of the output tokens rather than extra. Step-back planning and batching always show a 0% projected saving: their benefits, less rework and less waiting, don't reduce the tokens in a single run.
 
 ## Run locally
 
-You need:
+You need Java 21+, Git, an Azure OpenAI resource with the three [model deployments](#model-tiers), and an Azure CLI sign-in with the **Cognitive Services OpenAI User** role on that resource. Maven is optional because the wrapper is included.
 
-- **Java 21+** and Git. Maven is optional; the wrapper is included.
-- An **Azure OpenAI resource** with the [model deployments](#model-tiers) below.
-- An Azure CLI sign-in with **Cognitive Services OpenAI User** on that resource.
-
-### Windows PowerShell
-
-Replace the endpoint with your resource URL:
+On Windows PowerShell, replace the endpoint with your own:
 
 ```powershell
 git clone https://github.com/roryp/token-design-patterns.git
@@ -113,27 +102,23 @@ export AZURE_OPENAI_USE_MANAGED_IDENTITY="true"
 sh ./mvnw spring-boot:run
 ```
 
-`sh` runs the included wrapper without an executable file permission.
-
 </details>
 
-Open **[localhost:8080](http://localhost:8080)**, select a pattern, and run its sample. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (or <kbd>⌘</kbd>+<kbd>Enter</kbd>) also submits a request.
-
-Identity authentication uses `DefaultAzureCredential`: your Azure CLI sign-in locally and managed identity in Azure. Keys and access tokens stay on the server.
+Then open [localhost:8080](http://localhost:8080). Authentication uses `DefaultAzureCredential`: your Azure CLI sign-in locally and managed identity in Azure. Keys and tokens stay on the server.
 
 ### Model tiers
 
 | Tier | Default deployment | Used for |
 |---|---|---|
-| Small | `gpt-5.6-luna` | Classification, fast responses, compression |
-| Medium | `gpt-5.6-terra` | Code answers, caching, batch work |
-| Large | `gpt-5.6-sol` | Architecture, deeper reasoning, grounded answers |
+| Small | `gpt-5.6-luna` | Routing and knowledge answers, simple triage, compression, tool explanations, step-back plans |
+| Medium | `gpt-5.6-terra` | Code answers, RAG answers, caching, batch items |
+| Large | `gpt-5.6-sol` | Architecture answers, complex triage, answers from compressed context, plan execution |
 
-LangChain4j Agentic orchestrates the workflows, and the official OpenAI Java SDK sends stateless Responses API requests to Azure. For custom deployment names or API-key authentication, see [configuration](docs/operations.md#configuration).
+To use other deployment names or an API key, see [configuration](docs/operations.md#configuration).
 
 ## Deploy to Azure
 
-**First deployment?** Follow the [Azure setup steps](docs/operations.md#first-deployment) for permissions, model availability, quota, and environment creation. For an environment that is already configured:
+For a first deployment, follow the [setup steps](docs/operations.md#first-deployment) for permissions, model quota, and environment creation. After that, deploy with:
 
 ```powershell
 azd provision --preview
@@ -141,16 +126,7 @@ azd up
 azd env get-value AZURE_CONTAINER_APP_URL
 ```
 
-The template runs a non-root Java 21 container on Azure Container Apps with managed identity, external HTTPS, health probes, and scale-to-zero. ACR builds the image remotely, so you don't need Docker locally. The operations guide covers [architecture, lifecycle commands, and troubleshooting](docs/operations.md#azure-architecture).
-
-## Before you go on stage
-
-- Open the deployed URL and run one sample to warm the app and confirm model access.
-- Run cache tests 1 and 2 to confirm MISS, then HIT. A HIT is very likely but not guaranteed; if test 2 misses, run test 3.
-- Check model quota for your audience size. One batch can make up to six model calls.
-- Reload the browser after each deployment. If the app was explicitly stopped, deploying may not restart it; see [start and stop](docs/operations.md#start-and-stop).
-- Keep the screenshots above as a clearly labeled fallback in case connectivity fails.
-- Use a controlled workshop environment and monitor cost. Scale-to-zero does not remove registry, storage, or monitoring charges.
+The app runs as a non-root Java 21 container on Azure Container Apps with managed identity, HTTPS, health probes, and scale-to-zero. ACR builds the image remotely, so you don't need Docker. If the app was explicitly stopped, `azd up` may not start it; see [start and stop](docs/operations.md#start-and-stop). To avoid ongoing charges, see [cost and cleanup](docs/operations.md#cost-and-cleanup).
 
 ## Develop and test
 
@@ -158,22 +134,18 @@ The template runs a non-root Java 21 container on Azure Container Apps with mana
 .\mvnw.cmd clean package
 ```
 
-Tests use test-scoped stubs, so they need no Azure access or credentials. On macOS/Linux, run `sh ./mvnw clean package`.
+On macOS/Linux, run `sh ./mvnw clean package`. The tests use stub models, so they need no Azure access. Live checks make paid calls; the [verification guide](docs/operations.md#verification) covers the API smoke test and the Playwright suites.
 
-**Live tests make paid calls.** The [verification guide](docs/operations.md#verification) covers the API smoke test and the Playwright MCP suites for every pattern, desktop and mobile layouts, routing branches, caching, and input validation.
+### Code map
 
-### Where to explore
-
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| [PatternAgents.java](src/main/java/com/example/tokenpatterns/agent/PatternAgents.java) | AI prompts and deterministic agents |
-| [PatternRunner.java](src/main/java/com/example/tokenpatterns/service/PatternRunner.java) | Workflow composition and measurements |
-| [TraceCollector.java](src/main/java/com/example/tokenpatterns/service/TraceCollector.java) | Per-invocation provider usage and trace |
-| [OfficialSdkChatModel.java](src/main/java/com/example/tokenpatterns/agent/OfficialSdkChatModel.java) | Typed Responses API requests, cache controls, and provider usage |
-| [CacheInstructions.java](src/main/java/com/example/tokenpatterns/agent/CacheInstructions.java) | The exact cached instructions for each browser session |
-| [index.html](src/main/resources/static/index.html) | Dependency-free workshop UI |
-| [infra/](infra) | Azure resources and deployment configuration |
+| [PatternAgents.java](src/main/java/com/example/tokenpatterns/agent/PatternAgents.java) | Prompts and deterministic Java agents |
+| [PatternRunner.java](src/main/java/com/example/tokenpatterns/service/PatternRunner.java) | Builds each workflow and computes its metrics |
+| [TraceCollector.java](src/main/java/com/example/tokenpatterns/service/TraceCollector.java) | Records each agent invocation and its provider usage |
+| [OfficialSdkChatModel.java](src/main/java/com/example/tokenpatterns/agent/OfficialSdkChatModel.java) | Sends Responses API requests with cache controls and reads usage |
+| [CacheInstructions.java](src/main/java/com/example/tokenpatterns/agent/CacheInstructions.java) | Builds the cached instructions for each browser session |
+| [index.html](src/main/resources/static/index.html) | The dependency-free web UI |
+| [infra/](infra) | Azure resources for `azd` |
 
-**Stack:** Java 21 · Spring Boot 4.1.0 · LangChain4j 1.19.0 · Agentic 1.19.0-beta29 · OpenAI Java SDK 4.63.1. Exact versions are pinned in [pom.xml](pom.xml). Agentic is experimental, so keep it pinned and rerun the tests when upgrading.
-
-For HTTP contracts, environment variables, operations, and cleanup, see the **[operations and API reference](docs/operations.md)**.
+**Stack:** Java 21 · Spring Boot 4.1.0 · LangChain4j 1.19.0 · LangChain4j Agentic 1.19.0-beta29 · OpenAI Java SDK 4.63.1. Versions are pinned in [pom.xml](pom.xml); Agentic is experimental, so rerun the tests when upgrading it.
