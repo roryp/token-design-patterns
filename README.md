@@ -2,8 +2,6 @@
 
 TokenFlow Lab is an interactive workshop for eight LLM agent design patterns: routing, triage, context compression, RAG, tool use, step-back planning, prompt caching, and batching. Each run executes a real [LangChain4j Agentic](https://docs.langchain4j.dev/tutorials/agents/) workflow on Azure OpenAI and shows which models it called, how many tokens they used, and the answer they produced.
 
-**[Open the live lab](https://ca-tokenflow-dev-h4anbfs7yreo6.lemonwave-32f00510.eastus2.azurecontainerapps.io/)** · [Operations and API reference](docs/operations.md)
-
 > Every run makes billable Azure OpenAI calls. The live lab may be offline between workshops.
 
 [![TokenFlow Lab with the pattern list, a completed triage run, its execution graph, token metrics, answer, and agent trace](docs/images/tokenflow-lab-desktop.png)](docs/images/tokenflow-lab-desktop.png)
@@ -21,7 +19,7 @@ TokenFlow Lab is an interactive workshop for eight LLM agent design patterns: ro
 
 ## Quick tour
 
-Open the [live lab](https://ca-tokenflow-dev-h4anbfs7yreo6.lemonwave-32f00510.eastus2.azurecontainerapps.io/) or [run it locally](#run-locally), then try these four runs:
+Open the running demo then try these four runs:
 
 1. **Triage, simple.** Select **Triage** and run the sample question. A Java rule classifies it without spending tokens, and the small model answers.
 2. **Triage, complex.** Replace the question with this prompt and run it again. This time the large model answers.
