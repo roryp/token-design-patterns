@@ -51,18 +51,18 @@ A [one-page overview](docs/images/tokenflow-patterns-overview.svg) of all eight 
 
 ### Workshop modules
 
-Each pattern has a hands-on [workshop module](docs/workshop/README.md) with a demo mission to complete in the lab, a guided code walkthrough, a scavenger hunt, and Q&A prompts with an answer key.
+Each pattern has a short [workshop module](docs/workshop/README.md): try it in the lab, read the key code, and discuss two questions.
 
-| Module | Mission |
+| Module | What you will see |
 |---|---|
-| [1. Router](docs/workshop/01-router.md) | Make requests reach each of the three specialists |
-| [2. Triage](docs/workshop/02-triage.md) | Predict SIMPLE or COMPLEX before the zero-token gate decides |
-| [3. Context compression](docs/workshop/03-context-compression.md) | Prove that the large model never saw the full incident history |
-| [4. RAG](docs/workshop/04-rag.md) | Retrieve the right chunks, then get the model to admit when it has no evidence |
-| [5. Tool use](docs/workshop/05-tool-use.md) | Get an exact, auditable cost and trigger the validation errors |
-| [6. Step-back planning](docs/workshop/06-step-back.md) | Measure what the plan costs and decide when it is worth it |
-| [7. Caching](docs/workshop/07-caching.md) | Produce a MISS, then a HIT, then a MISS again |
-| [8. Batching](docs/workshop/08-batching.md) | Show that parallelism cuts waiting but not tokens |
+| [1. Router](docs/workshop/01-router.md) | A small model picks one specialist |
+| [2. Triage](docs/workshop/02-triage.md) | A zero-token Java rule picks the small or large model |
+| [3. Context compression](docs/workshop/03-context-compression.md) | The large model reads a short summary, not the full history |
+| [4. RAG](docs/workshop/04-rag.md) | The model answers only from retrieved chunks |
+| [5. Tool use](docs/workshop/05-tool-use.md) | Java does the arithmetic; the model explains it |
+| [6. Step-back planning](docs/workshop/06-step-back.md) | A cheap plan frames an expensive answer |
+| [7. Caching](docs/workshop/07-caching.md) | Azure reports a cache MISS, then a HIT |
+| [8. Batching](docs/workshop/08-batching.md) | Parallel calls cut waiting, not tokens |
 
 ## How the cache test works
 
