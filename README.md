@@ -1,6 +1,6 @@
 # TokenFlow Lab
 
-For a presentation overview, see the [workshop slides](Slides.pdf).
+For a presentation overview, see the [workshop slides](Slides.pdf). For hands-on exercises, follow the [workshop modules](docs/workshop/README.md).
 
 TokenFlow Lab is an interactive workshop for eight LLM agent design patterns: routing, triage, context compression, RAG, tool use, step-back planning, prompt caching, and batching. Each run executes a real [LangChain4j Agentic](https://docs.langchain4j.dev/tutorials/agents/) workflow on Azure OpenAI and shows which models it called, how many tokens they used, and the answer they produced.
 
@@ -9,6 +9,7 @@ TokenFlow Lab is an interactive workshop for eight LLM agent design patterns: ro
 ## Contents
 
 - [Quick tour](#quick-tour)
+- [Workshop modules](docs/workshop/README.md)
 - [The patterns](#the-patterns)
 - [How the cache test works](#how-the-cache-test-works)
 - [Reading the metrics](#reading-the-metrics)
@@ -47,6 +48,21 @@ Each pattern has a sample input, an animated execution graph, and teaching notes
 | **Batching** | One to six independent items, one model call each, run in parallel | The sample, or your own items separated by semicolons or newlines |
 
 A [one-page overview](docs/images/tokenflow-patterns-overview.svg) of all eight patterns is also available.
+
+### Workshop modules
+
+Each pattern has a hands-on [workshop module](docs/workshop/README.md) with a demo mission to complete in the lab, a guided code walkthrough, a scavenger hunt, and Q&A prompts with an answer key.
+
+| Module | Mission |
+|---|---|
+| [1. Router](docs/workshop/01-router.md) | Make requests reach each of the three specialists |
+| [2. Triage](docs/workshop/02-triage.md) | Predict SIMPLE or COMPLEX before the zero-token gate decides |
+| [3. Context compression](docs/workshop/03-context-compression.md) | Prove that the large model never saw the full incident history |
+| [4. RAG](docs/workshop/04-rag.md) | Retrieve the right chunks, then get the model to admit when it has no evidence |
+| [5. Tool use](docs/workshop/05-tool-use.md) | Get an exact, auditable cost and trigger the validation errors |
+| [6. Step-back planning](docs/workshop/06-step-back.md) | Measure what the plan costs and decide when it is worth it |
+| [7. Caching](docs/workshop/07-caching.md) | Produce a MISS, then a HIT, then a MISS again |
+| [8. Batching](docs/workshop/08-batching.md) | Show that parallelism cuts waiting but not tokens |
 
 ## How the cache test works
 
